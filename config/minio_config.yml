@@ -1,0 +1,43 @@
+minio:
+  config:
+    bucket:
+      bronze:
+        name: raw-files
+      completed:
+        name: processing-completed-files
+
+    environment-specific:
+      local:
+        host: http://minio:9000
+        username: minioadmin
+        password: minioadmin1!
+        accessible: True
+        ssl-enabled: False
+
+      dev:
+        host: https://minio:9000
+        username: minioadmin
+        password: minioadmin1!
+        accessible: True
+        ssl-enabled: True
+
+      qa:
+        host: https://minio:9000
+        username: minioadmin
+        password: minioadmin1!
+        accessible: True
+        ssl-enabled: True
+
+      uat:
+        host: https://minio:9000
+        username: minioadmin
+        password: minioadmin1!
+        accessible: True
+        ssl-enabled: True
+
+      prod:
+        host: https://minio:9000
+        username: minioadmin
+        password: minioadmin1!
+        accessible: True
+        ssl-enabled: True
