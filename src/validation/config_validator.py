@@ -1,11 +1,19 @@
 import sys
+
 from constants import common_constants as constants
+
 
 # Validate Minio config
 def validate_minio_config(minio_config, env: str):
+    """
+    This function validates the minio config read from the config files
+
+    :param minio_config: Minio configs as Dictionary read from the config files
+    :param env: Environment name
+    """
 
     # Check if config not found
-    if not minio_config or minio_config is not None:
+    if not minio_config or minio_config is None:
         print("Minio config not found")
         sys.exit(1)
 
@@ -40,7 +48,7 @@ def validate_minio_config(minio_config, env: str):
         sys.exit(1)
 
     # Validate SSL enabelment config
-    ssl_enabled = minio_config.get(constants.MINIO_SSL_CONFIG_PATH.format(env=env))
+    ssl_enabled = bool(minio_config.get(constants.MINIO_SSL_CONFIG_PATH.format(env=env)))
     if not isinstance(ssl_enabled, bool):
         print("SSL Enabled config is not a boolean")
         sys.exit(1)
