@@ -1,0 +1,54 @@
+minio:
+  config:
+    aws-minio-credential-provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+    aws-minio-packages: org.apache.hadoop:hadoop-aws:3.4.2,software.amazon.awssdk:bundle:2.29.52,software.amazon.awssdk:url-connection-client:2.29.52
+
+    bucket:
+      bronze:
+        name: raw
+        inventory: inventory_updates
+        sales: sales
+        customer: customer_data
+        ingestion-date: ingestion_date
+        batch-run-time: batch_run_time
+
+      silver:
+        name: cleansed
+        ingestion-date: ingestion_date
+        batch-run-time: batch_run_time
+
+    environment-specific:
+      local:
+        host: localhost:9000
+        username: minioadmin
+        password: minioadmin1!
+        accessible: True
+        ssl-enabled: False
+
+      dev:
+        host: minio:9000
+        username: minioadmin
+        password: minioadmin1!
+        accessible: True
+        ssl-enabled: True
+
+      qa:
+        host: minio:9000
+        username: minioadmin
+        password: minioadmin1!
+        accessible: True
+        ssl-enabled: True
+
+      uat:
+        host: minio:9000
+        username: minioadmin
+        password: minioadmin1!
+        accessible: True
+        ssl-enabled: True
+
+      prod:
+        host: minio:9000
+        username: minioadmin
+        password: minioadmin1!
+        accessible: True
+        ssl-enabled: True

@@ -1,0 +1,17 @@
+# Distributed Processing & Data Manipulation
+pyspark==4.1.2
+pandas>=2.2.2
+numpy>=1.26.4
+pydantic==2.13.4
+
+# File system
+PyYAML>=6.0.3
+minio>=7.2.14
+
+# Postgres
+psycopg2-binary==2.9.12
+SQLAlchemy==2.0.50
+
+# DevOps & Testing
+pytest>=8.1.1
+docker>=7.0.0
