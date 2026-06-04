@@ -12,6 +12,11 @@ minio:
         ingestion-date: ingestion_date
         batch-run-time: batch_run_time
 
+      silver:
+        name: cleansed
+        ingestion-date: ingestion_date
+        batch-run-time: batch_run_time
+
     environment-specific:
       local:
         host: localhost:9000

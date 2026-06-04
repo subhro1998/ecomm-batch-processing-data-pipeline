@@ -1,0 +1,24 @@
+source_system:
+  finance_and_accounting:
+    file_type: .csv
+    processing_type: batch
+    batch_frequency: 2
+    batch_run_time: 08:00,17:00
+
+  refund_and_return:
+    file_type: .json
+    processing_type: batch
+    batch_frequency: 1
+    batch_run_time: 00:30
+
+  inventory_updates:
+    file_type: .csv
+    processing_type: batch
+    batch_frequency: 2
+    batch_run_time: 07:00,16:00
+
+  customer_system:
+    file_type: .parquet
+    processing_type: batch
+    batch_frequency: 1
+    batch_run_time: 00:00

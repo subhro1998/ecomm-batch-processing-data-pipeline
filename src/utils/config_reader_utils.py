@@ -1,4 +1,4 @@
-import sys
+import logging
 
 import yaml
 
@@ -21,12 +21,12 @@ def read_config(config_file_path: str) -> dict | None:
                 if flattened_config is not None:
                     return flattened_config
                 else:
-                    print("Config tree is empty")
-                    sys.exit(1)
+                    logging.error("Config tree is empty")
+                    return None
 
     except FileNotFoundError:
-        print(f"Config files not found in path: {config_file_path}")
-        sys.exit(1)
+        logging.error(f"Config files not found in path: {config_file_path}")
+        return None
 
 
 def flatten_dict(dict_to_flatten, parent_key='', separator='.') -> dict:
