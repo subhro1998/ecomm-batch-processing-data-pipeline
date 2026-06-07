@@ -12,12 +12,6 @@ MINIO_CONFIG_VALUE_FILE_SYSTEM_S3AFILE_SYSTEM = 'org.apache.hadoop.fs.s3a.S3AFil
 MINIO_AWS_CREDENTIALS_PROVIDER_CONFIG_VALUE = 'minio.config.aws-minio-credential-provider'
 MINIO_AWS_SPARK_PACKAGES_CONFIG_VALUE = 'minio.config.aws-minio-packages'
 
-# Source System config key
-CONFIG_KEY_SOURCE_SYSTEM = 'source_system'
-CONFIG_KEY_SOURCE_FILE_TYPE = 'source_system.{source_system}.file_type'
-CONFIG_KEY_PROCESSING_TYPE = 'source_system.{source_system}.processing_type'
-CONFIG_KEY_BATCH_RUN_TIME = 'source_system.{source_system}.batch_run_time'
-
 # Config files path
 MINIO_CONFIG_FILE = 'config/minio_config.yml'
 POSTGRES_CONFIG_FILE = 'config/postgres_config.yml'
@@ -30,18 +24,22 @@ MINIO_USERNAME_CONFIG_PATH = 'minio.config.environment-specific.{env}.username'
 MINIO_USER_PASSWORD_CONFIG_PATH = 'minio.config.environment-specific.{env}.password'
 MINIO_FILE_ACCESSIBLE_CONFIG_PATH = 'minio.config.environment-specific.{env}.accessible'
 MINIO_SSL_CONFIG_PATH = 'minio.config.environment-specific.{env}.ssl-enabled'
+MINIO_SUB_FOLDER_TEMPLATE_KEY = 'minio.config.datetime_sub_folder_template'
 
 # Minio Bucket related configs
 MINIO_BUCKET_FILE_PATH = 'minio.config.bucket.{processing_layer}.name'
-MINIO_BUCKET_INGESTION_DATE_SUB_PATH = 'minio.config.bucket.{processing_layer}.processor-date'
-MINIO_BUCKET_BATCH_RUNTIME_SUB_PATH = 'minio.config.bucket.{processing_layer}.batch-run-time'
-MINIO_BUCKET_SALES_SUB_FOLDER = 'minio.config.bucket.{processing_layer}.sales'
-MINIO_BUCKET_INVENTORY_SUB_FOLDER = 'minio.config.bucket.{processing_layer}.inventory'
-MINIO_BUCKET_CUSTOMER_SUB_FOLDER = 'minio.config.bucket.{processing_layer}.customer'
-MINIO_BUCKET_COMPLETED_FILE_PATH = 'minio.config.bucket.completed.name'
 MINIO_SERVER_FILE_PATH = 's3a://{bucket_name_with_subfolder}'
-BUCKET_NAME_WITH_SUBFOLDER_TEMPLATE = '{bucket_name}/{ingestion_date}/{batch_run_time}'
-MINIO_OBJECT_NAME_WITHOUT_BUCKET = '{ingestion_date}/{batch_run_time}/{file_name_with_extension}'
+BUCKET_NAME_WITH_SUBFOLDER_TEMPLATE = '{bucket_name}/{sub_directory}/{ingestion_date}/{batch_run_time}'
+ONLY_SUBFOLDER_TEMPLATE_WITHOUT_FILE_NAME = '{sub_directory}/{ingestion_date}/{batch_run_time}'
+MINIO_OBJECT_NAME_WITHOUT_BUCKET = '{sub_directory}/{ingestion_date}/{batch_run_time}/{file_name_with_extension}'
+
+# Pipeline config
+CONFIGURED_SOURCE_SYSTEMS_KEY = 'source_system.configured_source_systems'  # Value will be a List
+ALL_CONFIGURED_SOURCE_CATEGORIES_KEY = 'source_system.source_categories'  # Value will be a List
+SOURCE_FILE_SUB_DIRECTORY_KEY = 'source_system.batch_specific_config.{source_system}.sub_directory'
+BATCH_SPECIFIC_CONFIG_FILE_TYPE_KEY = 'source_system.batch_specific_config.{source_system}.raw_file_type'
+BATCH_SPECIFIC_CONFIG_PROCESSING_CATEGORY_KEY = 'source_system.batch_specific_config.{source_system}.processing_category'
+BATCH_SPECIFIC_CONFIG_BATCH_RUN_TIME_KEY = 'source_system.batch_specific_config.{source_system}.batch_run_time'
 
 # Valid source systems
 VALID_SOURCE_SYSTEMS = ['customer-data', 'inventory-updates', 'sales', 'notify-customer']

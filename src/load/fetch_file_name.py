@@ -25,7 +25,12 @@ def fetch_processing_file_name(file_type: str, batch_input: BatchInput,
         return None
 
     # the sub folder based on processing layer & bucket in which intended file should be present
-    sub_folder = f'{batch_input.batch_run_date}/{batch_input.batch_run_time}'
+    sub_folder = constant.ONLY_SUBFOLDER_TEMPLATE_WITHOUT_FILE_NAME.format(
+        sub_directory=batch_config.data_pipeline_config.get(
+            constant.SOURCE_FILE_SUB_DIRECTORY_KEY.format(source_system=batch_input.source_system)),
+        ingestion_date=batch_input.batch_run_date,
+        batch_run_time=batch_input.batch_run_time
+    )
 
     file_name = minio_client.connect_minio_and_fetch_file(
         batch_config.minio_connection,

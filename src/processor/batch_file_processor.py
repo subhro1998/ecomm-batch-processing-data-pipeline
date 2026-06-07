@@ -18,11 +18,14 @@ def invoke_batch_processor(batch_inputs: BatchInput):
     :return: None
     """
 
-    # Read and validate batch procesing inputs
+    # Read and validate batch processing inputs
     is_valid_input = input_validator.validate_batch_processor_inputs(batch_inputs)
     if not is_valid_input:
         logging.error(f"Batch processor input validation failed")
         return None
+
+    # Remove ':' from provide batch run time
+    batch_inputs.batch_run_time = batch_inputs.batch_run_time.replace(":", "")
 
     # Read, validate and create all required config & session data
     batch_config = load_and_validate_required_config(batch_inputs)
@@ -30,8 +33,8 @@ def invoke_batch_processor(batch_inputs: BatchInput):
         logging.error(f"Batch processor input validation failed")
         return None
 
-    source_file_type = batch_config.data_pipeline_config.get(
-        constant.CONFIG_KEY_SOURCE_FILE_TYPE.format(source_system=batch_inputs.source_system))
+    source_file_type = batch_config.data_pipeline_config[
+        constant.BATCH_SPECIFIC_CONFIG_FILE_TYPE_KEY.format(source_system=batch_inputs.source_system)]
     if (not source_file_type or source_file_type is None or not isinstance(source_file_type, str)
             or source_file_type not in [constant.FILE_EXTENSION_CSV, constant.FILE_EXTENSION_JSON,
                                         constant.FILE_EXTENSION_PARQUET]):
@@ -39,6 +42,7 @@ def invoke_batch_processor(batch_inputs: BatchInput):
         return None
 
     load_file_and_process(source_file_type, batch_inputs, batch_config)
+    return None
 
 
 # Load configuration and set in config_model object
@@ -50,8 +54,12 @@ def load_and_validate_required_config(batch_inputs: BatchInput) -> BatchConfig |
 
     # Read and validate pipeline config data
     data_pipeline_config = config_reader_utils.read_config(constant.DATA_PIPELINE_CONFIG_FILE)
+    if data_pipeline_config is None:
+        logging.error(f"Data pipeline config read failed")
+        return None
+
     is_data_pipeline_config_valid = config_validator.validate_data_pipeline_config(
-        data_pipeline_config, batch_inputs.source_system)
+        data_pipeline_config, batch_inputs)
     if not is_data_pipeline_config_valid:
         logging.error(f"Data pipeline config validation failed")
         return None
@@ -79,9 +87,9 @@ def load_and_validate_required_config(batch_inputs: BatchInput) -> BatchConfig |
     return batch_config
 
 
-# Load the data from file, invoke transfomrmation if required and upload file in separate bucket
+# Load the data from file, invoke transformation if required and upload file in separate bucket
 def load_file_and_process(source_file_type: str, batch_inputs: BatchInput,
-                          batch_config: BatchConfig):
+                          batch_config: BatchConfig) -> None:
     """
     This method loads file and reads as data frame and invoke further processing based on the processing layer
     :param source_file_type: Source file type (Extension)
@@ -111,8 +119,15 @@ def load_file_and_process(source_file_type: str, batch_inputs: BatchInput,
             # TODO: Load into raw table
             source_bucket_name = batch_config.minio_config.get(constant.MINIO_BUCKET_FILE_PATH.format(
                 processing_layer=batch_inputs.processing_layer))
+            if source_bucket_name is None or not isinstance(source_bucket_name, str):
+                logging.error(f"Source bucket name is {source_bucket_name} not valid")
+                return None
+
             minio_object_file_path = constant.MINIO_OBJECT_NAME_WITHOUT_BUCKET.format(
                 ingestion_date=batch_inputs.batch_run_date,
+                sub_directory=batch_config.data_pipeline_config.get(
+                    constant.SOURCE_FILE_SUB_DIRECTORY_KEY.format(
+                        source_system=batch_inputs.source_system)),
                 batch_run_time=batch_inputs.batch_run_time,
                 file_name_with_extension=file_name
             )
@@ -126,13 +141,14 @@ def load_file_and_process(source_file_type: str, batch_inputs: BatchInput,
             )
             logging.info(f"Transfer complete for file: {file_name} "
                          f"at layer: {batch_inputs.processing_layer} is complete")
+            return None
 
         case constant.SILVER_LAYER:
-            # Invoke bronze -> silver transfomration
-            pass
+            # Invoke bronze -> silver transformation
+            return None
         case constant.GOLD_LAYER:
             # Invoke Silver -> Gold transformation
-            pass
+            return None
         case _:
-            logging.warning(f'{file_extension} file type is not supported as of now')
+            logging.warning(f'{source_file_type} file type is not supported as of now')
             return None

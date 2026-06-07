@@ -32,6 +32,8 @@ def read_file_and_convert_into_data_frame(batch_input: BatchInput, batch_config:
     batch_run_time = batch_input.batch_run_time
     bucket_with_subfolder = constants.BUCKET_NAME_WITH_SUBFOLDER_TEMPLATE.format(
         bucket_name=bucket_name,
+        sub_directory=batch_config.data_pipeline_config.get(
+            constants.SOURCE_FILE_SUB_DIRECTORY_KEY.format(source_system=batch_input.source_system)),
         ingestion_date=batch_run_date,
         batch_run_time=batch_run_time
     )

@@ -23,19 +23,6 @@ def validate_batch_processor_inputs(batch_inputs: BatchInput) -> bool:
         logging.error(f"Environment variable: {env} does not fall under expected values")
         return False
 
-    # Validate if the source_system is known or not
-    source_system = batch_inputs.source_system
-    if (not source_system or source_system is None
-            or source_system.lower() not in [constants.SOURCE_SYSTEM_FINANCE_AND_ACCOUNTING,
-                                             constants.SOURCE_SYSTEM_RETURN_AND_REFUND,
-                                             constants.SOURCE_SYSTEM_SUPPLIER_FEEDS,
-                                             constants.SOURCE_SYSTEM_SELLER_PERFORMANCE,
-                                             constants.SOURCE_SYSTEM_CUSTOMER_UPDATES,
-                                             constants.SOURCE_SYSTEM_INVENTORY_UPDATES]):
-
-        logging.error(f"Invalid Source system: {source_system} provided, unable to process data")
-        return False
-
     # Validate if batch run date is a Valid date in DD-MM-YYYY format
     batch_run_date = batch_inputs.batch_run_date
     if not batch_run_date or batch_run_date is None:

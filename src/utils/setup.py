@@ -1,5 +1,4 @@
 import logging
-import sys
 
 from minio import Minio
 from pyspark.sql import SparkSession

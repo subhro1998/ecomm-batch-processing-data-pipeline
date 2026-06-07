@@ -1,24 +1,90 @@
 source_system:
-  finance_and_accounting:
-    file_type: .csv
-    processing_type: batch
-    batch_frequency: 2
-    batch_run_time: 08:00,17:00
+  sub_folder_format: year={year}/month={month_of_year}/day={day_of_moth}/run={run_time_hh_mm}
 
-  refund_and_return:
-    file_type: .json
-    processing_type: batch
-    batch_frequency: 1
-    batch_run_time: 00:30
+  source_categories:
+    - finance_and_accounting
+    - refund_and_return
+    - inventory_updates
+    - customer_system
 
-  inventory_updates:
-    file_type: .csv
-    processing_type: batch
-    batch_frequency: 2
-    batch_run_time: 07:00,16:00
+  configured_source_systems:
+    - payment_reconciliation
+    - tax_summary
+    - sales_ledger
+    - vendor_payables
+    - refund_and_return
+    - inventory_updates
+    - customer_system
 
-  customer_system:
-    file_type: .parquet
-    processing_type: batch
-    batch_frequency: 1
-    batch_run_time: 00:00
+  batch_specific_config:
+    payment_reconciliation:
+      raw_file_type: .csv
+      processing_type: batch
+      batch_frequency: 2
+      batch_run_time:
+        - 08:00
+        - 17:00
+      sub_directory: finance
+      manual_invocation: True
+      processing_category: finance_and_accounting
+
+    tax_summary:
+      raw_file_type: .csv
+      processing_type: batch
+      batch_frequency: 1
+      batch_run_time:
+        - 00:00
+      sub_directory: finance
+      manual_invocation: True
+      processing_category: finance_and_accounting
+
+    sales_ledger:
+      raw_file_type: .csv
+      processing_type: batch
+      batch_frequency: 1
+      batch_run_time:
+        - 00:00
+      sub_directory: finance
+      manual_invocation: True
+      processing_category: finance_and_accounting
+
+    vendor_payables:
+      raw_file_type: .csv
+      processing_type: batch
+      batch_frequency: 1
+      batch_run_time:
+        - 00:00
+      sub_directory: finance
+      manual_invocation: True
+      processing_category: finance_and_accounting
+
+    refund_and_return:
+      raw_file_type: .json
+      processing_type: batch
+      batch_frequency: 1
+      batch_run_time:
+        - 00:30
+      sub_directory: refund_and_return
+      manual_invocation: True
+      processing_category: refund_and_return
+
+    inventory_updates:
+      raw_file_type: .csv
+      processing_type: batch
+      batch_frequency: 2
+      batch_run_time:
+        - 07:00
+        - 16:00
+      sub_directory: inventory
+      manual_invocation: False
+      processing_category: inventory_updates
+
+    customer_system:
+      raw_file_type: .parquet
+      processing_type: batch
+      batch_frequency: 1
+      batch_run_time:
+        - 00:00
+      sub_directory: customer
+      manual_invocation: True
+      processing_category: customer_system

@@ -6,7 +6,7 @@ from pyspark.sql import SparkSession
 
 
 @dataclass
-class BatchConfig():
+class BatchConfig:
     """
     This model class gives structure to store all required configurations
     for successful batch processing completion
