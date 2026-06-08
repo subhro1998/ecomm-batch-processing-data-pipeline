@@ -2,20 +2,17 @@ minio:
   config:
     aws-minio-credential-provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
     aws-minio-packages: org.apache.hadoop:hadoop-aws:3.4.2,software.amazon.awssdk:bundle:2.29.52,software.amazon.awssdk:url-connection-client:2.29.52
+    datetime_sub_folder_template: '{parent_source_directory}/year={yyyy}/month={mm}/day={dd}/run={hhmm}'
 
     bucket:
       bronze:
         name: raw
-        inventory: inventory_updates
-        sales: sales
-        customer: customer_data
-        ingestion-date: ingestion_date
-        batch-run-time: batch_run_time
 
       silver:
         name: cleansed
-        ingestion-date: ingestion_date
-        batch-run-time: batch_run_time
+
+      gold:
+        name: aggregated
 
     environment-specific:
       local:

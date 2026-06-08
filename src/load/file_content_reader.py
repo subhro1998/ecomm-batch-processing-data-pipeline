@@ -9,10 +9,16 @@ from model.batch_inputs_model import BatchInput
 
 # Load CSV files from configured minio bucket
 def read_file_and_convert_into_data_frame(batch_input: BatchInput, batch_config: BatchConfig,
-                                          file_name: str, file_extension: str) -> DataFrame | None:
+                                          file_name: str, sub_folder: str,
+                                          file_extension: str) -> DataFrame | None:
     """
     This method is used to load csv files, run basic validation and store in Bronze raw table
     It uses the attached Batch Input model for connecting to minio and fetching the file
+    :param batch_input: Batch Input model
+    :param batch_config: Batch Config model
+    :param file_name: File name
+    :param sub_folder: Minio subdirectory
+    :param file_extension: File extension
     :return: The csv file name along with data frame or None in case of failure
     """
 
@@ -20,20 +26,16 @@ def read_file_and_convert_into_data_frame(batch_input: BatchInput, batch_config:
     spark = batch_config.spark_session
 
     # Append bucket name with sub folder and validate configured bucket name is string
-    bucket_name = minio_config.get(constants.MINIO_BUCKET_FILE_PATH.format(
+    bucket_name = minio_config.get(constants.MINIO_BUCKET_FILE_PATH_CONFIG_KEY.format(
         processing_layer=batch_input.processing_layer))
     if bucket_name is None or not bucket_name or not isinstance(bucket_name, str):
         logging.error(
             f'Bucket name: {bucket_name} is not in valid string format for {batch_input.processing_layer} layer')
         return None
 
-    # Fetch batch run date & time, file path & sub folder based on processing layer & bucket
-    batch_run_date = batch_input.batch_run_date
-    batch_run_time = batch_input.batch_run_time
     bucket_with_subfolder = constants.BUCKET_NAME_WITH_SUBFOLDER_TEMPLATE.format(
         bucket_name=bucket_name,
-        ingestion_date=batch_run_date,
-        batch_run_time=batch_run_time
+        sub_directory=sub_folder
     )
     file_path = constants.MINIO_SERVER_FILE_PATH.format(bucket_name_with_subfolder=bucket_with_subfolder)
     if file_name is None or not file_name.endswith(file_extension):

@@ -1,6 +1,7 @@
 import logging
 
 from constants import common_constants as constant
+from model.batch_inputs_model import BatchInput
 
 
 # Validate Minio config
@@ -53,33 +54,72 @@ def validate_minio_config(minio_config, env: str) -> bool:
         logging.error("SSL Enabled config is not a boolean")
         return False
 
+    # Validate if sub folder config is present
+    sub_folder_template = minio_config.get(constant.MINIO_SUB_FOLDER_TEMPLATE_KEY)
+    if not sub_folder_template or sub_folder_template is None or not isinstance(sub_folder_template, str) :
+        logging.error(f"Sub folder template key {sub_folder_template} is not valid")
+        return False
+
     logging.info("Minio config validated successfully")
     return True
 
 
 def validate_data_pipeline_config(data_pipeline_config: dict,
-                                  source_system: str) -> bool:
+                                  batch_input: BatchInput) -> bool:
     """
     This function validates the data pipeline config read from the config file
     :param data_pipeline_config: Data pipeline config as Dictionary read from the config file
-    :param source_system: Source system name from input
+    :param batch_input: Provided batch input
     :return: True if the configuration is valid, False otherwise
     """
-    if not data_pipeline_config or data_pipeline_config is None or not isinstance(data_pipeline_config, dict):
+    if (not data_pipeline_config or data_pipeline_config is None
+            or not isinstance(data_pipeline_config, dict)):
         logging.error(f"Batch processor config file: {constant.DATA_PIPELINE_CONFIG_FILE} read failed, "
                       f"Stoping to process further")
         return False
 
-    source_system_config_key = constant.CONFIG_KEY_SOURCE_SYSTEM + '.' + source_system
-    source_system_config_exists = False
-    for key in data_pipeline_config.keys():
-        if key.startswith(source_system_config_key):
-            source_system_config_exists = True
-            break
+    # Validate if the source system is configured
+    configured_source_systems = data_pipeline_config[constant.CONFIGURED_SOURCE_SYSTEMS_KEY]
+    if (not isinstance(configured_source_systems, list) or len(configured_source_systems) == 0
+            or batch_input.source_system not in configured_source_systems):
+        logging.error(f"Source system {batch_input.source_system} is not in configured yet")
+        return False
 
-    # Validate that the source system is configured
-    if not source_system_config_exists:
-        logging.error(f"Source system {source_system} is not in config file")
+    # Validate if batch name and incoming file for upstream system is configured for processing
+    configured_batch_upstream_category = data_pipeline_config[constant.ALL_CONFIGURED_SOURCE_CATEGORIES_KEY]
+    if (not isinstance(configured_batch_upstream_category, list) or len(configured_batch_upstream_category) == 0
+            or batch_input.batch_category not in configured_batch_upstream_category):
+        logging.error(f"Batch name {batch_input.batch_category} is not in configured yet")
+        return False
+
+    # Validate if required batch specific config is present
+    # 1. Validate parent_source_directory
+    # 2. Validate processing_category
+    # 3. Validate batch_run_time
+    # 4. Validate raw_file_type
+    parent_source_directory = data_pipeline_config[
+        constant.FILE_SOURCE_PARENT_DIRECTORY_KEY.format(source_system=batch_input.source_system)]
+    if parent_source_directory is None or not isinstance(parent_source_directory, str):
+        logging.error(f"Sub directory {parent_source_directory} is not configured properly")
+        return False
+
+    processing_category = data_pipeline_config[
+        constant.BATCH_SPECIFIC_CONFIG_PROCESSING_CATEGORY_KEY.format(source_system=batch_input.source_system)]
+    if processing_category is None or not isinstance(processing_category, str):
+        logging.error(f"Processing category {processing_category} is not configured properly")
+        return False
+
+    configured_batch_run_times = data_pipeline_config[
+        constant.BATCH_SPECIFIC_CONFIG_BATCH_RUN_TIME_KEY.format(source_system=batch_input.source_system)]
+    if (configured_batch_run_times is None or not isinstance(configured_batch_run_times, list)
+            or len(configured_batch_run_times) == 0):
+        logging.error(f"Batch run times {configured_batch_run_times} is not configured properly")
+        return False
+
+    raw_file_type = data_pipeline_config[
+        constant.BATCH_SPECIFIC_CONFIG_FILE_TYPE_KEY.format(source_system=batch_input.source_system)]
+    if raw_file_type is None or not isinstance(raw_file_type, str):
+        logging.error(f"Source raw file type {raw_file_type} is not configured properly")
         return False
 
     return True
