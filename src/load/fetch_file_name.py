@@ -4,6 +4,7 @@ from constants import common_constants as constant
 from files import minio_client
 from model.batch_config_model import BatchConfig
 from model.batch_inputs_model import BatchInput
+from src.utils import common_utils
 
 
 def fetch_processing_file_name(file_type: str, batch_input: BatchInput,
@@ -17,7 +18,7 @@ def fetch_processing_file_name(file_type: str, batch_input: BatchInput,
     """
 
     # Append bucket name with sub folder and validate configured bucket name is string
-    bucket_name = batch_config.minio_config.get(constant.MINIO_BUCKET_FILE_PATH.format(
+    bucket_name = batch_config.minio_config.get(constant.MINIO_BUCKET_FILE_PATH_CONFIG_KEY.format(
         processing_layer=batch_input.processing_layer))
     if bucket_name is None or not bucket_name or not isinstance(bucket_name, str):
         logging.error(
@@ -25,13 +26,7 @@ def fetch_processing_file_name(file_type: str, batch_input: BatchInput,
         return None
 
     # the sub folder based on processing layer & bucket in which intended file should be present
-    sub_folder = constant.ONLY_SUBFOLDER_TEMPLATE_WITHOUT_FILE_NAME.format(
-        sub_directory=batch_config.data_pipeline_config.get(
-            constant.SOURCE_FILE_SUB_DIRECTORY_KEY.format(source_system=batch_input.source_system)),
-        ingestion_date=batch_input.batch_run_date,
-        batch_run_time=batch_input.batch_run_time
-    )
-
+    sub_folder = common_utils.construct_sub_folder(batch_input, batch_config)
     file_name = minio_client.connect_minio_and_fetch_file(
         batch_config.minio_connection,
         bucket_name,

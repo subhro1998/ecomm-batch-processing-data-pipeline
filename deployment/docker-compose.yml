@@ -1,0 +1,218 @@
+name: ecom-data-engg-batch_processing
+volumes:
+  minio_data:
+    name: ecomm-data-storage-minio
+  postgres_data:
+    name: ecomm-postgres-data
+  mongodb_data:
+    name: ecomm-mongodb-data
+  mongodb_config_data:
+    name: ecomm-mongodb-config-data
+  airflow_postgres_data:
+    name: ecomm-airflow-postgres-data
+  airflow_dags:
+    name: ecomm-airflow-dags
+  airflow_logs:
+    name: ecomm-airflow-logs
+  airflow_plugins:
+    name: ecomm-airflow-plugins
+  airflow_config:
+    name: ecomm-airflow-config
+
+services:
+  # minio set up for object / file storage
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    user: "0:0"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin1!
+    entrypoint: >
+      /bin/sh -c "
+      minio server /data --console-address ':9001' &
+      MINIO_PID=$$!
+
+      echo 'Waiting for MinIO to be ready...';
+      until curl -sf http://localhost:9000/minio/health/live; do
+        sleep 2;
+      done;
+
+      mc alias set ecomm-data-pipeline http://localhost:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/raw/finance;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/raw/inventory;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/raw/customer;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/raw/refund_and_return;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/cleansed/finance;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/cleansed/inventory;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/cleansed/customer;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/cleansed/refund_and_return;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/aggregated/finance;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/aggregated/inventory;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/aggregated/customer;
+      /usr/bin/mc mb --ignore-existing ecomm-data-pipeline/aggregated/refund_and_return;
+      echo 'MinIO buckets initialized.';
+
+      wait $$MINIO_PID
+      "
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # postgres DB for Gold layer analytics data
+  postgres:
+    image: postgres:18
+    container_name: postgres
+    restart: unless-stopped
+    ports:
+      - "5436:5432"
+    environment:
+      POSTGRES_DB: ecommerce
+      POSTGRES_USER: db_user
+      POSTGRES_PASSWORD: ImS0Advanced!
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U db_user -d ecommerce" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB for logs / audit-related storage
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongo_user
+      MONGO_INITDB_ROOT_PASSWORD: ImS0Advanced!
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config_data:/data/configdb
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # py-spark set up
+  pyspark:
+    image: quay.io/jupyter/pyspark-notebook:latest
+    container_name: pyspark
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "8888:8888"
+      - "4040:4040"
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      JUPYTER_TOKEN: "pyspark"
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin1!
+      AWS_REGION: us-east-1
+      PYSPARK_SUBMIT_ARGS: >-
+        --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.postgresql:postgresql:42.7.3,org.mongodb.spark:mongo-spark-connector_2.12:10.3.0
+        --conf spark.hadoop.fs.s3a.access.key=minioadmin
+        --conf spark.hadoop.fs.s3a.secret.key=minioadmin1!
+        --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000
+        --conf spark.hadoop.fs.s3a.path.style.access=true
+        --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+        --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false
+        pyspark-shell
+
+  # Airflow metadata database
+  airflow-postgres:
+    image: postgres:18
+    container_name: airflow-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: airflow_db_admin
+      POSTGRES_PASSWORD: ImS0Advanced!
+      POSTGRES_DB: airflowPgDB
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U airflow_db_admin -d airflowPgDB" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Airflow initialization and webserver set up
+  airflow-webserver:
+    image: apache/airflow:2.10.5
+    container_name: airflow-webserver
+    restart: unless-stopped
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    user: "${AIRFLOW_UID:-50000}:0"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_db_admin:ImS0Advanced!@airflow-postgres/airflowPgDB
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: airflow-secret-key
+    entrypoint: /bin/bash
+    command: >-
+      -c "airflow db migrate &&
+      (airflow users create
+        --username airflow_admin
+        --password airflow_admin
+        --firstname Airflow
+        --lastname Admin
+        --role Admin
+        --email airflow.practice.subhpanja98@gmail.com || true) &&
+      airflow webserver"
+    ports:
+      - "8080:8080"
+    volumes:
+      - airflow_dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - airflow_config:/opt/airflow/config
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Airflow scheduler
+  airflow-scheduler:
+    image: apache/airflow:2.10.5
+    container_name: airflow-scheduler
+    restart: unless-stopped
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+      airflow-webserver:
+        condition: service_healthy
+    user: "${AIRFLOW_UID:-50000}:0"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow_db_admin:ImS0Advanced!@airflow-postgres/airflowPgDB
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: airflow-secret-key
+    command: scheduler
+    volumes:
+      - airflow_dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - airflow_config:/opt/airflow/config

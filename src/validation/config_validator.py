@@ -54,6 +54,12 @@ def validate_minio_config(minio_config, env: str) -> bool:
         logging.error("SSL Enabled config is not a boolean")
         return False
 
+    # Validate if sub folder config is present
+    sub_folder_template = minio_config.get(constant.MINIO_SUB_FOLDER_TEMPLATE_KEY)
+    if not sub_folder_template or sub_folder_template is None or not isinstance(sub_folder_template, str) :
+        logging.error(f"Sub folder template key {sub_folder_template} is not valid")
+        return False
+
     logging.info("Minio config validated successfully")
     return True
 
@@ -87,14 +93,14 @@ def validate_data_pipeline_config(data_pipeline_config: dict,
         return False
 
     # Validate if required batch specific config is present
-    # 1. Validate sub_directory
+    # 1. Validate parent_source_directory
     # 2. Validate processing_category
     # 3. Validate batch_run_time
     # 4. Validate raw_file_type
-    sub_directory = data_pipeline_config[
-        constant.SOURCE_FILE_SUB_DIRECTORY_KEY.format(source_system=batch_input.source_system)]
-    if sub_directory is None or not isinstance(sub_directory, str):
-        logging.error(f"Sub directory {sub_directory} is not configured properly")
+    parent_source_directory = data_pipeline_config[
+        constant.FILE_SOURCE_PARENT_DIRECTORY_KEY.format(source_system=batch_input.source_system)]
+    if parent_source_directory is None or not isinstance(parent_source_directory, str):
+        logging.error(f"Sub directory {parent_source_directory} is not configured properly")
         return False
 
     processing_category = data_pipeline_config[

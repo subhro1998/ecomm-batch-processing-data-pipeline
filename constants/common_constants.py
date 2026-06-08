@@ -27,16 +27,15 @@ MINIO_SSL_CONFIG_PATH = 'minio.config.environment-specific.{env}.ssl-enabled'
 MINIO_SUB_FOLDER_TEMPLATE_KEY = 'minio.config.datetime_sub_folder_template'
 
 # Minio Bucket related configs
-MINIO_BUCKET_FILE_PATH = 'minio.config.bucket.{processing_layer}.name'
+MINIO_BUCKET_FILE_PATH_CONFIG_KEY = 'minio.config.bucket.{processing_layer}.name'
 MINIO_SERVER_FILE_PATH = 's3a://{bucket_name_with_subfolder}'
-BUCKET_NAME_WITH_SUBFOLDER_TEMPLATE = '{bucket_name}/{sub_directory}/{ingestion_date}/{batch_run_time}'
-ONLY_SUBFOLDER_TEMPLATE_WITHOUT_FILE_NAME = '{sub_directory}/{ingestion_date}/{batch_run_time}'
-MINIO_OBJECT_NAME_WITHOUT_BUCKET = '{sub_directory}/{ingestion_date}/{batch_run_time}/{file_name_with_extension}'
+BUCKET_NAME_WITH_SUBFOLDER_TEMPLATE = '{bucket_name}/{sub_directory}'
+FULL_FILE_PATH_WITHOUT_BUCKET = '{sub_directory}/{file_name_with_extension}'
 
 # Pipeline config
 CONFIGURED_SOURCE_SYSTEMS_KEY = 'source_system.configured_source_systems'  # Value will be a List
 ALL_CONFIGURED_SOURCE_CATEGORIES_KEY = 'source_system.source_categories'  # Value will be a List
-SOURCE_FILE_SUB_DIRECTORY_KEY = 'source_system.batch_specific_config.{source_system}.sub_directory'
+FILE_SOURCE_PARENT_DIRECTORY_KEY = 'source_system.batch_specific_config.{source_system}.parent_source_directory'
 BATCH_SPECIFIC_CONFIG_FILE_TYPE_KEY = 'source_system.batch_specific_config.{source_system}.raw_file_type'
 BATCH_SPECIFIC_CONFIG_PROCESSING_CATEGORY_KEY = 'source_system.batch_specific_config.{source_system}.processing_category'
 BATCH_SPECIFIC_CONFIG_BATCH_RUN_TIME_KEY = 'source_system.batch_specific_config.{source_system}.batch_run_time'
@@ -69,3 +68,13 @@ SOURCE_SYSTEM_SUPPLIER_FEEDS = 'supplier_feeds'
 SOURCE_SYSTEM_SELLER_PERFORMANCE = 'seller_performance'
 SOURCE_SYSTEM_CUSTOMER_UPDATES = 'customer_updates'
 SOURCE_SYSTEM_INVENTORY_UPDATES = 'inventory_updates'
+
+# Common date formats
+SUPPORTED_DATE_FORMATS = [
+    "%Y-%m-%d",
+    "%d-%m-%Y",
+    "%m-%d-%Y",
+    "%Y/%m/%d",
+    "%d/%m/%Y",
+    "%m/%d/%Y",
+]

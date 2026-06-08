@@ -5,7 +5,7 @@ from files import copy_and_transfer_file as transfer_file
 from model.batch_config_model import BatchConfig
 from model.batch_inputs_model import BatchInput
 from src.load import fetch_file_name, file_content_reader
-from src.utils import config_reader_utils
+from src.utils import config_reader_utils, date_utils, common_utils
 from src.utils import setup as config_setup
 from src.validation import input_validator, config_validator
 
@@ -23,9 +23,6 @@ def invoke_batch_processor(batch_inputs: BatchInput):
     if not is_valid_input:
         logging.error(f"Batch processor input validation failed")
         return None
-
-    # Remove ':' from provide batch run time
-    batch_inputs.batch_run_time = batch_inputs.batch_run_time.replace(":", "")
 
     # Read, validate and create all required config & session data
     batch_config = load_and_validate_required_config(batch_inputs)
@@ -64,6 +61,12 @@ def load_and_validate_required_config(batch_inputs: BatchInput) -> BatchConfig |
         logging.error(f"Data pipeline config validation failed")
         return None
 
+    batch_run_date_time_model = date_utils.construct_batch_run_datetime_model(
+        batch_inputs.batch_run_date, batch_inputs.batch_run_time)
+    if batch_run_date_time_model is None:
+        logging.error(f"Batch processor input validation failed")
+        return None
+
     # Load and validate minio config
     minio_config = config_setup.load_and_validate_minio_config(batch_inputs.environment)
     if minio_config is None:
@@ -82,7 +85,8 @@ def load_and_validate_required_config(batch_inputs: BatchInput) -> BatchConfig |
         data_pipeline_config=data_pipeline_config,
         postgres_config=None,  # TODO: read & populate later
         spark_session=spark_session,
-        minio_connection=minio_connection
+        minio_connection=minio_connection,
+        batch_run_date_time=batch_run_date_time_model
     )
     return batch_config
 
@@ -103,10 +107,12 @@ def load_file_and_process(source_file_type: str, batch_inputs: BatchInput,
         logging.error(f"Processing file {file_name} failed")
         return None
 
+    sub_folder = common_utils.construct_sub_folder(batch_inputs, batch_config)
     data_frame_file_content = file_content_reader.read_file_and_convert_into_data_frame(
         batch_inputs,
         batch_config,
         file_name,
+        sub_folder,
         source_file_type
     )
 
@@ -117,18 +123,14 @@ def load_file_and_process(source_file_type: str, batch_inputs: BatchInput,
     match batch_inputs.processing_layer.lower():
         case constant.BRONZE_LAYER:
             # TODO: Load into raw table
-            source_bucket_name = batch_config.minio_config.get(constant.MINIO_BUCKET_FILE_PATH.format(
+            source_bucket_name = batch_config.minio_config.get(constant.MINIO_BUCKET_FILE_PATH_CONFIG_KEY.format(
                 processing_layer=batch_inputs.processing_layer))
             if source_bucket_name is None or not isinstance(source_bucket_name, str):
                 logging.error(f"Source bucket name is {source_bucket_name} not valid")
                 return None
 
-            minio_object_file_path = constant.MINIO_OBJECT_NAME_WITHOUT_BUCKET.format(
-                ingestion_date=batch_inputs.batch_run_date,
-                sub_directory=batch_config.data_pipeline_config.get(
-                    constant.SOURCE_FILE_SUB_DIRECTORY_KEY.format(
-                        source_system=batch_inputs.source_system)),
-                batch_run_time=batch_inputs.batch_run_time,
+            minio_object_file_path = constant.FULL_FILE_PATH_WITHOUT_BUCKET.format(
+                sub_directory=sub_folder,
                 file_name_with_extension=file_name
             )
 

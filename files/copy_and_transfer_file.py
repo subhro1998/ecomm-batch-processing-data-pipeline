@@ -21,7 +21,7 @@ def transfer_copied_file_to_target(file_target_layer: str, minio_config: dict,
     """
 
     # Create target bucket if not exists
-    target_bucket = minio_config.get(constant.MINIO_BUCKET_FILE_PATH.format(processing_layer=file_target_layer))
+    target_bucket = minio_config.get(constant.MINIO_BUCKET_FILE_PATH_CONFIG_KEY.format(processing_layer=file_target_layer))
     if target_bucket is None or not isinstance(target_bucket, str):
         logging.error(f"Target bucket name: {target_bucket} is invalid, transfer is cancelled")
         return None

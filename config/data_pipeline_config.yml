@@ -24,7 +24,7 @@ source_system:
       batch_run_time:
         - 08:00
         - 17:00
-      sub_directory: finance
+      parent_source_directory: finance
       manual_invocation: True
       processing_category: finance_and_accounting
 
@@ -34,7 +34,7 @@ source_system:
       batch_frequency: 1
       batch_run_time:
         - 00:00
-      sub_directory: finance
+      parent_source_directory: finance
       manual_invocation: True
       processing_category: finance_and_accounting
 
@@ -44,7 +44,7 @@ source_system:
       batch_frequency: 1
       batch_run_time:
         - 00:00
-      sub_directory: finance
+      parent_source_directory: finance
       manual_invocation: True
       processing_category: finance_and_accounting
 
@@ -54,7 +54,7 @@ source_system:
       batch_frequency: 1
       batch_run_time:
         - 00:00
-      sub_directory: finance
+      parent_source_directory: finance
       manual_invocation: True
       processing_category: finance_and_accounting
 
@@ -64,7 +64,7 @@ source_system:
       batch_frequency: 1
       batch_run_time:
         - 00:30
-      sub_directory: refund_and_return
+      parent_source_directory: refund_and_return
       manual_invocation: True
       processing_category: refund_and_return
 
@@ -75,7 +75,7 @@ source_system:
       batch_run_time:
         - 07:00
         - 16:00
-      sub_directory: inventory
+      parent_source_directory: inventory
       manual_invocation: False
       processing_category: inventory_updates
 
@@ -85,6 +85,6 @@ source_system:
       batch_frequency: 1
       batch_run_time:
         - 00:00
-      sub_directory: customer
+      parent_source_directory: customer
       manual_invocation: True
       processing_category: customer_system
