@@ -117,7 +117,7 @@ def validate_data_pipeline_config(data_pipeline_config: dict,
         return False
 
     raw_file_type = data_pipeline_config[
-        constant.BATCH_SPECIFIC_CONFIG_FILE_TYPE_KEY.format(source_system=batch_input.source_system)]
+        constant.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(source_system=batch_input.source_system)]
     if raw_file_type is None or not isinstance(raw_file_type, str):
         logging.error(f"Source raw file type {raw_file_type} is not configured properly")
         return False

@@ -36,7 +36,9 @@ FULL_FILE_PATH_WITHOUT_BUCKET = '{sub_directory}/{file_name_with_extension}'
 CONFIGURED_SOURCE_SYSTEMS_KEY = 'source_system.configured_source_systems'  # Value will be a List
 ALL_CONFIGURED_SOURCE_CATEGORIES_KEY = 'source_system.source_categories'  # Value will be a List
 FILE_SOURCE_PARENT_DIRECTORY_KEY = 'source_system.batch_specific_config.{source_system}.parent_source_directory'
-BATCH_SPECIFIC_CONFIG_FILE_TYPE_KEY = 'source_system.batch_specific_config.{source_system}.raw_file_type'
+BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY = 'source_system.batch_specific_config.{source_system}.raw_file_type'
+BATCH_SPECIFIC_CONFIG_CLEANSED_FILE_TYPE_KEY = 'source_system.batch_specific_config.{source_system}.cleansed_file_type'
+BATCH_SPECIFIC_CONFIG_AGGREGATED_FILE_TYPE_KEY = 'source_system.batch_specific_config.{source_system}.aggregated_file_type'
 BATCH_SPECIFIC_CONFIG_PROCESSING_CATEGORY_KEY = 'source_system.batch_specific_config.{source_system}.processing_category'
 BATCH_SPECIFIC_CONFIG_BATCH_RUN_TIME_KEY = 'source_system.batch_specific_config.{source_system}.batch_run_time'
 

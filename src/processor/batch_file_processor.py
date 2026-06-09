@@ -1,7 +1,7 @@
 import logging
 
 from constants import common_constants as constant
-from files import copy_and_transfer_file as transfer_file
+from files import upload_transfer_file as transfer_file
 from model.batch_config_model import BatchConfig
 from model.batch_inputs_model import BatchInput
 from src.load import fetch_file_name, file_content_reader
@@ -31,7 +31,7 @@ def invoke_batch_processor(batch_inputs: BatchInput):
         return None
 
     source_file_type = batch_config.data_pipeline_config[
-        constant.BATCH_SPECIFIC_CONFIG_FILE_TYPE_KEY.format(source_system=batch_inputs.source_system)]
+        constant.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(source_system=batch_inputs.source_system)]
     if (not source_file_type or source_file_type is None or not isinstance(source_file_type, str)
             or source_file_type not in [constant.FILE_EXTENSION_CSV, constant.FILE_EXTENSION_JSON,
                                         constant.FILE_EXTENSION_PARQUET]):
@@ -120,6 +120,16 @@ def load_file_and_process(source_file_type: str, batch_inputs: BatchInput,
         logging.error(f"Reading file content from: {file_name} failed")
         return None
 
+    target_file_type = fetch_target_file_type(batch_inputs, batch_config.data_pipeline_config)
+    if target_file_type is None:
+        logging.error(f"Target file type is {target_file_type} failed")
+        return None
+
+    target_file_name = (f'{batch_inputs.source_system}_{batch_inputs.processing_layer}_'
+                        f'{batch_config.batch_run_date_time.year}{batch_config.batch_run_date_time.month}'
+                        f'{batch_config.batch_run_date_time.day}')
+    logging.info(f"Constructed target file name: {target_file_name}")
+
     match batch_inputs.processing_layer.lower():
         case constant.BRONZE_LAYER:
             # TODO: Load into raw table
@@ -129,16 +139,12 @@ def load_file_and_process(source_file_type: str, batch_inputs: BatchInput,
                 logging.error(f"Source bucket name is {source_bucket_name} not valid")
                 return None
 
-            minio_object_file_path = constant.FULL_FILE_PATH_WITHOUT_BUCKET.format(
-                sub_directory=sub_folder,
-                file_name_with_extension=file_name
-            )
-
-            transfer_file.transfer_copied_file_to_target(
-                constant.SILVER_LAYER,  # Transfer the file in Silver layer for next processing
+            transfer_file.upload_file_content_to_target(
+                data_frame_file_content,
+                constant.SILVER_LAYER,  # Upload the file in Silver layer for further processing
                 batch_config.minio_config,
-                source_bucket_name,
-                minio_object_file_path,
+                sub_folder,
+                target_file_name,
                 batch_config.minio_connection
             )
             logging.info(f"Transfer complete for file: {file_name} "
@@ -154,3 +160,37 @@ def load_file_and_process(source_file_type: str, batch_inputs: BatchInput,
         case _:
             logging.warning(f'{source_file_type} file type is not supported as of now')
             return None
+
+
+def fetch_target_file_type(batch_inputs: BatchInput, data_pipeline_config: dict) -> str | None:
+    """
+    This method fetches target file type from batch_inputs based on processing layer
+    :param batch_inputs:
+    :param data_pipeline_config:
+    :return: Fetched target file type or None in case not configured or not supported processing layer
+    """
+
+    source_system = batch_inputs.source_system
+    processing_layer = batch_inputs.processing_layer
+    target_file_type = None
+
+    # Fetch the target file type based on Processing layer and source system
+    match processing_layer.strip().lower():
+        case constant.BRONZE_LAYER:
+            target_file_type = data_pipeline_config[constant.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(
+                source_system=source_system)]
+
+        case constant.SILVER_LAYER:
+            target_file_type = data_pipeline_config[constant.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(
+                source_system=source_system)]
+
+        case constant.GOLD_LAYER:
+            target_file_type = data_pipeline_config[constant.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(
+                source_system=source_system)]
+
+        case '_':
+            logging.error(f'Source system {source_system} not supported, unable to fetch target file type')
+            return None
+
+    logging.info(f"Fetched target file type for {source_system} layer is: {target_file_type}")
+    return target_file_type

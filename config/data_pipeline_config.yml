@@ -19,6 +19,8 @@ source_system:
   batch_specific_config:
     payment_reconciliation:
       raw_file_type: .csv
+      cleansed_file_type: .parquet
+      aggregated_file_type: .parquet
       processing_type: batch
       batch_frequency: 2
       batch_run_time:
@@ -30,6 +32,8 @@ source_system:
 
     tax_summary:
       raw_file_type: .csv
+      cleansed_file_type: .parquet
+      aggregated_file_type: .parquet
       processing_type: batch
       batch_frequency: 1
       batch_run_time:
@@ -40,6 +44,8 @@ source_system:
 
     sales_ledger:
       raw_file_type: .csv
+      cleansed_file_type: .parquet
+      aggregated_file_type: .parquet
       processing_type: batch
       batch_frequency: 1
       batch_run_time:
@@ -50,6 +56,8 @@ source_system:
 
     vendor_payables:
       raw_file_type: .csv
+      cleansed_file_type: .csv
+      aggregated_file_type: .csv
       processing_type: batch
       batch_frequency: 1
       batch_run_time:
@@ -60,6 +68,8 @@ source_system:
 
     refund_and_return:
       raw_file_type: .json
+      cleansed_file_type: .json
+      aggregated_file_type: .json
       processing_type: batch
       batch_frequency: 1
       batch_run_time:
@@ -81,6 +91,8 @@ source_system:
 
     customer_system:
       raw_file_type: .parquet
+      cleansed_file_type: .parquet
+      aggregated_file_type: .parquet
       processing_type: batch
       batch_frequency: 1
       batch_run_time:
