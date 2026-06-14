@@ -47,5 +47,6 @@ SILVER_SALES_LEDGER_SCHEMA = StructType([
     StructField("posted_by", StringType(), True),
     StructField("created_at", TimestampType(), False),
     StructField("source_system", StringType(), False),
+    StructField("source_file_name", StringType(), False),
     StructField("batch_id", StringType(), False),
 ])

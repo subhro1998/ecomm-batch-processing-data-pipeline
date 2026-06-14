@@ -1,0 +1,216 @@
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.types import DecimalType, BooleanType, StringType
+from pyspark.sql.window import Window
+
+from constants import transformation_constants, global_constants, common_constants
+from model.batch_inputs_model import BatchInput
+from schema import financial_data_system_schemas
+from src.utils import date_utils
+
+date_udf = F.udf(date_utils.convert_date_to_yyyy_mm_dd, StringType())
+
+
+def process_sales_ledger_data_silver(batch_inputs: BatchInput, df: DataFrame) -> None:
+    # 1st Step: deduplicate the data
+    unique_df, duplicates_df = deduplicate_sales_ledger_data(
+        df.withColumn("silver_processed_at", F.current_timestamp())
+    )
+
+    # 2nd step: Separate data that failed & passed the Silver layer validation
+    quarantined_df, valid_df = categorize_sales_ledger_data_validity(batch_inputs, unique_df)
+
+    # Step 3: Combine duplicate data and validation failed data and quarantine them to analyze further
+    records_to_quarantine = duplicates_df.unionByName(quarantined_df, allowMissingColumns=True)
+    # save_and_upload_bad_records(records_to_quarantine)
+
+    # Step 4: Type case data types and date time format to make the data uniform
+    valid_df = type_cast_sales_ledger_data(valid_df)
+
+    # Step 5: Cleanse the valid records, fill None values as per pre-decided strategy
+    cleansed_df = cleanse_and_transform_sales_ledger_data(valid_df)
+
+    return None
+
+
+# Quarantine the validation failed records to analyze later (should upload as a file & save in DB -> both)
+def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFrame) -> tuple[DataFrame, DataFrame]:
+    """
+    This method tags the original sales ledger data based on pre-configured keys,
+    figures out the validation failure reasons and columns that is not passing the check
+
+    :param batch_inputs: Batch Input model
+    :param df: Original sales ledger data frame
+    :return: A tuple of the
+             quarantined sales ledger data frame containing only the data that failed validations along with the reasons
+             and the valid sales ledger records data frame
+    """
+    validation_rules_list = [
+        (
+            F.col("source_system") != F.lit(batch_inputs.source_system),
+            "INVALID_SOURCE_SYSTEM",
+            ["source_system"]
+        ),
+        (
+            F.col("transaction_date").isNull() | F.col("transaction_time").isNotNull(),
+            "NULL_TXN_DATE_OR_TIME",
+            ["transaction_date", "transaction_time"],
+        ),
+        (
+            ~F.upper(F.col("currency")).isin(*global_constants.ALLOWED_CURRENCYS),
+            "INVALID_CURRENCY",
+            ["currency"]
+        ),
+        (
+            (F.col("debit_amount") < 0) | F.col("debit_amount").isNull(),
+            "NEGATIVE_DEBIT_AMOUNT",
+            ["debit_amount"]
+        ),
+        (
+            (F.col("credit_amount") < 0) | F.col("credit_amount").isNull(),
+            "NEGATIVE_CREDIT_AMOUNT",
+            ["credit_amount"]
+        ),
+        (
+            (F.col("net_amount") < 0) | F.col("net_amount").isNull(),
+            "NEGATIVE_NET_AMOUNT",
+            ["net_amount"]
+        ),
+        (
+            F.col("account_name").isNull() | (F.trim(F.col("account_name")) == ""),
+            "ACCOUNT_NAME_NULL_OR_BLANK",
+            ["account_name"]
+        ),
+        (
+            F.col("account_code").isNull() | (F.trim(F.col("account_code")) == ""),
+            "ACCOUNT_CODE_NULL_OR_BLANK",
+            ["account_code"]
+        ),
+        (
+            F.col("ledger_id").isNull() | (F.trim(F.col("ledger_id")) == ""),
+            "LEDGER_ID_NULL",
+            ["ledger_id"]
+        ),
+        (
+            F.round(F.col("credit_amount") - F.col("debit_amount"), 2) != F.round(F.col("net_amount"), 2),
+            "BALANCE_IS_BROKEN",
+            ["credit_amount", "debit_amount", "net_amount"]
+        ),
+        (
+            F.round(F.col("usd_equivalent_amount"), 2) !=
+            F.round(F.col("net_amount") * F.col("exchange_rate"), 2),
+            "USD_EQUIVALENCE_IS_NOT_MATCHING",
+            ["usd_equivalent_amount", "net_amount", "exchange_rate"]
+        ),
+        (
+            (F.col("entry_type") == F.lit(common_constants.ENTRY_TYPE_REVERSAL_PAYMENT)) & F.col(
+                "reversal_reference").isNull(),
+            "REVERSAL_PAYMENT_WITH_NO_REFERENCE",
+            ["entry_type", "reversal_reference"]
+        )
+    ]
+
+    failure_reason_codes = []
+    failed_column_checks = []
+    for condition, reason, column_names in validation_rules_list:
+        failure_reason_codes.append(
+            F.when(condition, F.lit(reason))
+        )
+        failed_column_checks.append(
+            F.when(condition, F.lit(column_name for column_name in column_names))
+        )
+
+    # Tag the whole data frame based on validation checks
+    tagged_df = df \
+        .withColumn(transformation_constants.COLUMN_NAME_FAILURE_REASON,
+                    F.array_compact(F.array(*failure_reason_codes))) \
+        .withColumn(transformation_constants.COLUMN_NAME_FAILED_COLUMNS,
+                    F.array_distinct(F.array_compact(F.array(*failed_column_checks)))) \
+        .withColumn(transformation_constants.COLUMN_NAME_VALIDATION_RESULT,
+                    F.when(
+                        F.size(F.array(failed_column_checks)) > 0,
+                        F.lit(transformation_constants.VALIDATION_RESULT_FAILED))
+                    .otherwise(F.lit(transformation_constants.VALIDATION_RESULT_SUCCESSFUL)))
+
+    # Quarantine the records that failed necessary validation
+    quarantined_df = tagged_df \
+        .filter(F.col(transformation_constants.COLUMN_NAME_VALIDATION_RESULT)
+                == transformation_constants.VALIDATION_RESULT_FAILED
+                and F.size(F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON)) > 0
+                and F.size(F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON)) > 0)
+
+    # Separate the valid records and use this data frame further
+    valid_df = tagged_df \
+        .filter(F.col(transformation_constants.COLUMN_NAME_VALIDATION_RESULT)
+                == transformation_constants.VALIDATION_RESULT_SUCCESSFUL) \
+        .drop(transformation_constants.COLUMN_NAME_FAILURE_REASON,
+
+              transformation_constants.COLUMN_NAME_FAILED_COLUMNS)
+
+    return quarantined_df, valid_df
+
+
+def deduplicate_sales_ledger_data(df: DataFrame) -> tuple[DataFrame, DataFrame]:
+    """
+    First de-duplicate sales ledger data based on pre-configured keys
+    and extract the duplicate records with reason for validation failure to quarantine for further analyze
+    :param df: Original sales ledger data frame
+    :return: Tuple of unique data and duplicated data
+    """
+    # Create the window function over Deduplication keys for Sales Ledger
+    window_function = Window \
+        .partitionBy(transformation_constants.SALES_LEDGER_DE_DUPLICATE_KEYS) \
+        .orderBy(F.col("created_at").desc())
+
+    # Ranked data frame with row_number for deduplication using natural keys for ales ledger
+    ranked_df = df.withColumn("row_number", F.row_number().over(window_function))
+
+    # Separate cleansed and duplicate data frames
+    unique_df = ranked_df \
+        .filter(F.col("row_number") == 1) \
+        .drop("row_number") \
+        .withColumn(transformation_constants.COLUMN_NAME_VALIDATION_RESULT,
+                    F.lit(transformation_constants.VALIDATION_RESULT_SUCCESSFUL))
+
+    duplicates_df = ranked_df \
+        .filter(F.col("row_number") > 1) \
+        .drop("row_number") \
+        .withColumn(transformation_constants.COLUMN_NAME_VALIDATION_RESULT,
+                    F.lit(transformation_constants.VALIDATION_RESULT_FAILED)) \
+        .withColumn(transformation_constants.COLUMN_NAME_FAILURE_REASON,
+                    F.lit(transformation_constants.VALIDATION_FAILURE_REASON_DUPLICATE))
+
+    return unique_df, duplicates_df
+
+
+def type_cast_sales_ledger_data(df: DataFrame) -> DataFrame:
+    """
+    Converts and imposes strict type checking for few columns in the DataFrame containing Sales ledger data
+
+    :param df: DataFrame containing Sales ledger data
+    :return: The same DataFrame but imposed strict type checking and processable format conversion
+    """
+
+    return df \
+        .withColumn("transaction_date", date_udf(F.col("transaction_date"))) \
+        .withColumn("transaction_time", F.to_time("transaction_time", "HH:mm:ss")) \
+        .withColumn("created_at", F.to_timestamp("created_at", "yyyy-MM-dd'T'HH:mm:ss'Z'")) \
+        .withColumn("debit_amount", F.col("debit_amount").cast(DecimalType(18, 2))) \
+        .withColumn("credit_amount", F.col("credit_amount").cast(DecimalType(18, 2))) \
+        .withColumn("net_amount", F.col("net_amount").cast(DecimalType(18, 2))) \
+        .withColumn("exchange_rate", F.col("exchange_rate").cast(DecimalType(10, 6))) \
+        .withColumn("usd_equivalent", F.col("usd_equivalent").cast(DecimalType(18, 2))) \
+        .withColumn("tax_amount", F.col("tax_amount").cast(DecimalType(18, 2))) \
+        .withColumn("discount_amount", F.col("discount_amount").cast(DecimalType(18, 2))) \
+        .withColumn("gross_amount", F.col("gross_amount").cast(DecimalType(18, 2))) \
+        .withColumn("cost_of_goods", F.col("cost_of_goods").cast(DecimalType(18, 2))) \
+        .withColumn("is_reconciled", F.col("is_reconciled").cast(BooleanType()))
+
+
+def cleanse_and_transform_sales_ledger_data(df: DataFrame) -> DataFrame:
+    # Trim all the string data types
+    for schema_field in financial_data_system_schemas.SILVER_SALES_LEDGER_SCHEMA.fields:
+        if schema_field.dataType.simpleString().lower() in ["string", "str"]:
+            df = df.withColumn(schema_field.name, F.trim(F.col(schema_field.name)))
+
+    return df

@@ -80,3 +80,5 @@ SUPPORTED_DATE_FORMATS = [
     "%d/%m/%Y",
     "%m/%d/%Y",
 ]
+
+ENTRY_TYPE_REVERSAL_PAYMENT = "REVERSAL"

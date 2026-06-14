@@ -1,0 +1,1 @@
+ALLOWED_CURRENCYS = ["USD", "EUR", "GBP", "INR", "JPY", "CHF", "YUN"]
