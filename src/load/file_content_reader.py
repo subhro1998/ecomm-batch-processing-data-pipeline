@@ -2,9 +2,9 @@ import logging
 
 from pyspark.sql import DataFrame
 
-from constants import common_constants as constants
-from model.batch_config_model import BatchConfig
-from model.batch_inputs_model import BatchInput
+from src.constants import common_constants
+from src.model.batch_config_model import BatchConfig
+from src.model.batch_inputs_model import BatchInput
 
 
 # Load CSV files from configured minio bucket
@@ -26,18 +26,18 @@ def read_file_and_convert_into_data_frame(batch_input: BatchInput, batch_config:
     spark = batch_config.spark_session
 
     # Append bucket name with sub folder and validate configured bucket name is string
-    bucket_name = minio_config.get(constants.MINIO_BUCKET_FILE_PATH_CONFIG_KEY.format(
+    bucket_name = minio_config.get(common_constants.MINIO_BUCKET_FILE_PATH_CONFIG_KEY.format(
         processing_layer=batch_input.processing_layer))
     if bucket_name is None or not bucket_name or not isinstance(bucket_name, str):
         logging.error(
             f'Bucket name: {bucket_name} is not in valid string format for {batch_input.processing_layer} layer')
         return None
 
-    bucket_with_subfolder = constants.BUCKET_NAME_WITH_SUBFOLDER_TEMPLATE.format(
+    bucket_with_subfolder = common_constants.BUCKET_NAME_WITH_SUBFOLDER_TEMPLATE.format(
         bucket_name=bucket_name,
         sub_directory=sub_folder
     )
-    file_path = constants.MINIO_SERVER_FILE_PATH.format(bucket_name_with_subfolder=bucket_with_subfolder)
+    file_path = common_constants.MINIO_SERVER_FILE_PATH.format(bucket_name_with_subfolder=bucket_with_subfolder)
     if file_name is None or not file_name.endswith(file_extension):
         logging.error(f'File name: {file_name} is either not provided '
                       f'or not matching with the file extension: {file_extension}')
@@ -47,17 +47,17 @@ def read_file_and_convert_into_data_frame(batch_input: BatchInput, batch_config:
     file_path_with_name = f'{file_path}/{file_name}'  # File absolute path
     df = None  # Initialize the data frame
     match file_extension:
-        case constants.FILE_EXTENSION_CSV:
+        case common_constants.FILE_EXTENSION_CSV:
             df = (spark.read
                   .option("header", True)
                   .option("inferSchema", True)
                   .csv(file_path_with_name, header=True, inferSchema=True))
-        case constants.FILE_EXTENSION_PARQUET:
+        case common_constants.FILE_EXTENSION_PARQUET:
             df = (spark.read
                   .option("header", True)
                   .option("inferSchema", True)
                   .parquet(file_path_with_name, header=True, inferSchema=True))
-        case constants.FILE_EXTENSION_JSON:
+        case common_constants.FILE_EXTENSION_JSON:
             df = (spark.read
                   .option("header", True)
                   .option("inferSchema", True)

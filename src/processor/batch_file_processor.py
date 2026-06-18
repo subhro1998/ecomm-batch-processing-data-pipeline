@@ -1,10 +1,10 @@
 import logging
 
-from constants import common_constants as constant
-from files import upload_transfer_file as transfer_file
-from model.batch_config_model import BatchConfig
-from model.batch_inputs_model import BatchInput
+from src.constants import common_constants
+from src.files import upload_transfer_file as transfer_file
 from src.load import fetch_file_name, file_content_reader
+from src.model.batch_config_model import BatchConfig
+from src.model.batch_inputs_model import BatchInput
 from src.utils import config_reader_utils, date_utils, common_utils
 from src.utils import setup as config_setup
 from src.validation import input_validator, config_validator
@@ -31,10 +31,10 @@ def invoke_batch_processor(batch_inputs: BatchInput):
         return None
 
     source_file_type = batch_config.data_pipeline_config[
-        constant.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(source_system=batch_inputs.source_system)]
+        common_constants.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(source_system=batch_inputs.source_system)]
     if (not source_file_type or source_file_type is None or not isinstance(source_file_type, str)
-            or source_file_type not in [constant.FILE_EXTENSION_CSV, constant.FILE_EXTENSION_JSON,
-                                        constant.FILE_EXTENSION_PARQUET]):
+            or source_file_type not in [common_constants.FILE_EXTENSION_CSV, common_constants.FILE_EXTENSION_JSON,
+                                        common_constants.FILE_EXTENSION_PARQUET]):
         logging.error(f"Source file type {source_file_type} is not processable as per current system")
         return None
 
@@ -50,7 +50,7 @@ def load_and_validate_required_config(batch_inputs: BatchInput) -> BatchConfig |
     """
 
     # Read and validate pipeline config data
-    data_pipeline_config = config_reader_utils.read_config(constant.DATA_PIPELINE_CONFIG_FILE)
+    data_pipeline_config = config_reader_utils.read_config(common_constants.DATA_PIPELINE_CONFIG_FILE)
     if data_pipeline_config is None:
         logging.error(f"Data pipeline config read failed")
         return None
@@ -131,17 +131,18 @@ def load_file_and_process(source_file_type: str, batch_inputs: BatchInput,
     logging.info(f"Constructed target file name: {target_file_name}")
 
     match batch_inputs.processing_layer.lower():
-        case constant.BRONZE_LAYER:
+        case common_constants.BRONZE_LAYER:
             # TODO: Load into raw table
-            source_bucket_name = batch_config.minio_config.get(constant.MINIO_BUCKET_FILE_PATH_CONFIG_KEY.format(
-                processing_layer=batch_inputs.processing_layer))
+            source_bucket_name = batch_config.minio_config.get(
+                common_constants.MINIO_BUCKET_FILE_PATH_CONFIG_KEY.format(
+                    processing_layer=batch_inputs.processing_layer))
             if source_bucket_name is None or not isinstance(source_bucket_name, str):
                 logging.error(f"Source bucket name is {source_bucket_name} not valid")
                 return None
 
             transfer_file.upload_file_content_to_target(
                 data_frame_file_content,
-                constant.SILVER_LAYER,  # Upload the file in Silver layer for further processing
+                common_constants.SILVER_LAYER,  # Upload the file in Silver layer for further processing
                 batch_config.minio_config,
                 sub_folder,
                 target_file_name,
@@ -151,10 +152,10 @@ def load_file_and_process(source_file_type: str, batch_inputs: BatchInput,
                          f"at layer: {batch_inputs.processing_layer} is complete")
             return None
 
-        case constant.SILVER_LAYER:
+        case common_constants.SILVER_LAYER:
             # Invoke bronze -> silver transformation
             return None
-        case constant.GOLD_LAYER:
+        case common_constants.GOLD_LAYER:
             # Invoke Silver -> Gold transformation
             return None
         case _:
@@ -176,16 +177,16 @@ def fetch_target_file_type(batch_inputs: BatchInput, data_pipeline_config: dict)
 
     # Fetch the target file type based on Processing layer and source system
     match processing_layer.strip().lower():
-        case constant.BRONZE_LAYER:
-            target_file_type = data_pipeline_config[constant.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(
+        case common_constants.BRONZE_LAYER:
+            target_file_type = data_pipeline_config[common_constants.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(
                 source_system=source_system)]
 
-        case constant.SILVER_LAYER:
-            target_file_type = data_pipeline_config[constant.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(
+        case common_constants.SILVER_LAYER:
+            target_file_type = data_pipeline_config[common_constants.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(
                 source_system=source_system)]
 
-        case constant.GOLD_LAYER:
-            target_file_type = data_pipeline_config[constant.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(
+        case common_constants.GOLD_LAYER:
+            target_file_type = data_pipeline_config[common_constants.BATCH_SPECIFIC_CONFIG_RAW_FILE_TYPE_KEY.format(
                 source_system=source_system)]
 
         case '_':

@@ -1,8 +1,8 @@
 import logging
 
-from constants import common_constants as constant
-from model.batch_config_model import BatchConfig
-from model.batch_inputs_model import BatchInput
+from src.constants import common_constants
+from src.model.batch_config_model import BatchConfig
+from src.model.batch_inputs_model import BatchInput
 
 
 def construct_sub_folder(batch_input: BatchInput, batch_config: BatchConfig) -> str:
@@ -14,9 +14,9 @@ def construct_sub_folder(batch_input: BatchInput, batch_config: BatchConfig) -> 
     """
     batch_run_datetime = batch_config.batch_run_date_time
 
-    sub_folder_template = batch_config.minio_config[constant.MINIO_SUB_FOLDER_TEMPLATE_KEY]
+    sub_folder_template = batch_config.minio_config[common_constants.MINIO_SUB_FOLDER_TEMPLATE_KEY]
     parent_source_directory = batch_config.data_pipeline_config[
-        constant.FILE_SOURCE_PARENT_DIRECTORY_KEY.format(source_system=batch_input.source_system)]
+        common_constants.FILE_SOURCE_PARENT_DIRECTORY_KEY.format(source_system=batch_input.source_system)]
 
     sub_folder_path = sub_folder_template.format(
         parent_source_directory=parent_source_directory,

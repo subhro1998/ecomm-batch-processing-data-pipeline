@@ -2,8 +2,8 @@ import logging
 import re
 from datetime import datetime
 
-from constants import common_constants as constants
-from model.batch_inputs_model import BatchInput
+from src.constants import common_constants
+from src.model.batch_inputs_model import BatchInput
 
 DATE_PATTERN_DD_MM_YYYY = re.compile(r"^\d{2}-\d{2}-\d{4}$")
 TIME_PATTERN_HH_MM = re.compile(r"^\d{2}:\d{2}$")
@@ -55,7 +55,8 @@ def validate_batch_processor_inputs(batch_inputs: BatchInput) -> bool:
     # Validate if processing_layer is within expected values
     processing_layer = batch_inputs.processing_layer
     if (not processing_layer or processing_layer is None
-            or processing_layer.lower() not in [constants.BRONZE_LAYER, constants.SILVER_LAYER, constants.GOLD_LAYER]):
+            or processing_layer.lower() not in
+            [common_constants.BRONZE_LAYER, common_constants.SILVER_LAYER, common_constants.GOLD_LAYER]):
         logging.error(f"Invalid processing layer provided: {processing_layer}")
         return False
 

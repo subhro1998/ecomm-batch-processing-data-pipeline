@@ -3,7 +3,7 @@ import logging
 from minio import Minio
 from pyspark.sql import DataFrame
 
-from constants import common_constants as constant
+from test import common_constants as constant
 
 
 def upload_file_content_to_target(data_frame: DataFrame, file_target_layer: str,

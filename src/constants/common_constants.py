@@ -70,15 +70,4 @@ SOURCE_SYSTEM_SUPPLIER_FEEDS = 'supplier_feeds'
 SOURCE_SYSTEM_SELLER_PERFORMANCE = 'seller_performance'
 SOURCE_SYSTEM_CUSTOMER_UPDATES = 'customer_updates'
 SOURCE_SYSTEM_INVENTORY_UPDATES = 'inventory_updates'
-
-# Common date formats
-SUPPORTED_DATE_FORMATS = [
-    "%Y-%m-%d",
-    "%d-%m-%Y",
-    "%m-%d-%Y",
-    "%Y/%m/%d",
-    "%d/%m/%Y",
-    "%m/%d/%Y",
-]
-
 ENTRY_TYPE_REVERSAL_PAYMENT = "REVERSAL"

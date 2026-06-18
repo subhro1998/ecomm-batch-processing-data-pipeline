@@ -1,9 +1,9 @@
 import logging
 
-from constants import common_constants as constant
-from files import minio_client
-from model.batch_config_model import BatchConfig
-from model.batch_inputs_model import BatchInput
+from src.constants import common_constants as constant
+from src.files import minio_client
+from src.model.batch_config_model import BatchConfig
+from src.model.batch_inputs_model import BatchInput
 from src.utils import common_utils
 
 

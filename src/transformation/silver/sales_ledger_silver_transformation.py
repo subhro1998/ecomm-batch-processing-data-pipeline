@@ -1,21 +1,20 @@
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import DecimalType, BooleanType, StringType
+from pyspark.sql.types import DecimalType, BooleanType
 from pyspark.sql.window import Window
 
-from constants import transformation_constants, global_constants, common_constants
-from model.batch_inputs_model import BatchInput
-from schema import financial_data_system_schemas
-from src.utils import date_utils
-
-date_udf = F.udf(date_utils.convert_date_to_yyyy_mm_dd, StringType())
+from src.constants import transformation_constants, common_constants, global_constants
+from src.model.batch_inputs_model import BatchInput
+from src.schema import financial_data_system_schemas
+from src.transformation import transformation_utils
 
 
 def process_sales_ledger_data_silver(batch_inputs: BatchInput, df: DataFrame) -> None:
-    # 1st Step: deduplicate the data
-    unique_df, duplicates_df = deduplicate_sales_ledger_data(
-        df.withColumn("silver_processed_at", F.current_timestamp())
-    )
+    # Step 1: add some necessary columns in the raw data
+    df = add_necessary_derived_columns(df)
+
+    # Step 2: Deduplicate records based on sales ledger natural keys
+    unique_df, duplicates_df = deduplicate_sales_ledger_data(df)
 
     # 2nd step: Separate data that failed & passed the Silver layer validation
     quarantined_df, valid_df = categorize_sales_ledger_data_validity(batch_inputs, unique_df)
@@ -33,6 +32,16 @@ def process_sales_ledger_data_silver(batch_inputs: BatchInput, df: DataFrame) ->
     return None
 
 
+def add_necessary_derived_columns(raw_df: DataFrame) -> DataFrame:
+    parsed_date = transformation_utils.parse_date_column_values("transaction_date")
+    parsed_time = transformation_utils.parse_time_column_values("transaction_time")
+
+    return raw_df \
+        .withColumn("silver_processed_at", F.current_timestamp()) \
+        .withColumn("_parsed_txn_date", parsed_date) \
+        .withColumn("_parsed_txn_time", parsed_time)
+
+
 # Quarantine the validation failed records to analyze later (should upload as a file & save in DB -> both)
 def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFrame) -> tuple[DataFrame, DataFrame]:
     """
@@ -45,6 +54,7 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
              quarantined sales ledger data frame containing only the data that failed validations along with the reasons
              and the valid sales ledger records data frame
     """
+
     validation_rules_list = [
         (
             F.col("source_system") != F.lit(batch_inputs.source_system),
@@ -54,7 +64,12 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
         (
             F.col("transaction_date").isNull() | F.col("transaction_time").isNotNull(),
             "NULL_TXN_DATE_OR_TIME",
-            ["transaction_date", "transaction_time"],
+            ["transaction_date", "transaction_time"]
+        ),
+        (
+            F.col("_parsed_txn_date").isNull() | F.col("_parsed_txn_time").isNull(),
+            "NOT_PARSABLE_DATE_OR_TIME_FORMAT",
+            ["transaction_date", "transaction_time"]
         ),
         (
             ~F.upper(F.col("currency")).isin(*global_constants.ALLOWED_CURRENCYS),
@@ -144,7 +159,6 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
         .filter(F.col(transformation_constants.COLUMN_NAME_VALIDATION_RESULT)
                 == transformation_constants.VALIDATION_RESULT_SUCCESSFUL) \
         .drop(transformation_constants.COLUMN_NAME_FAILURE_REASON,
-
               transformation_constants.COLUMN_NAME_FAILED_COLUMNS)
 
     return quarantined_df, valid_df
@@ -192,8 +206,6 @@ def type_cast_sales_ledger_data(df: DataFrame) -> DataFrame:
     """
 
     return df \
-        .withColumn("transaction_date", date_udf(F.col("transaction_date"))) \
-        .withColumn("transaction_time", F.to_time("transaction_time", "HH:mm:ss")) \
         .withColumn("created_at", F.to_timestamp("created_at", "yyyy-MM-dd'T'HH:mm:ss'Z'")) \
         .withColumn("debit_amount", F.col("debit_amount").cast(DecimalType(18, 2))) \
         .withColumn("credit_amount", F.col("credit_amount").cast(DecimalType(18, 2))) \
@@ -208,9 +220,13 @@ def type_cast_sales_ledger_data(df: DataFrame) -> DataFrame:
 
 
 def cleanse_and_transform_sales_ledger_data(df: DataFrame) -> DataFrame:
-    # Trim all the string data types
+    # Trim all values of the string data types
     for schema_field in financial_data_system_schemas.SILVER_SALES_LEDGER_SCHEMA.fields:
         if schema_field.dataType.simpleString().lower() in ["string", "str"]:
             df = df.withColumn(schema_field.name, F.trim(F.col(schema_field.name)))
+
+    # Derive the quarter of sale
+
+    # Flag the data which has discount
 
     return df

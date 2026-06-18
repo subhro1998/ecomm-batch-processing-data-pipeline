@@ -3,7 +3,7 @@ import logging
 from minio import Minio
 from minio.error import S3Error
 
-from src.validation import bronze_validator
+from test import bronze_validator
 
 
 def connect_minio_and_fetch_file(minio_conn: Minio, bucket_name: str,

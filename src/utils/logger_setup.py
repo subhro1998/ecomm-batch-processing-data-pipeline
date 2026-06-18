@@ -1,10 +1,11 @@
 import json
 import logging.config
 
-from constants import common_constants as constant
+from src.constants import common_constants
+
 
 def setup_logging():
-    with open(constant.LOGGING_CONFIG_FILE, "r", encoding="utf-8") as file:
+    with open(common_constants.LOGGING_CONFIG_FILE, "r", encoding="utf-8") as file:
         config = json.load(file)
 
     logging.config.dictConfig(config)

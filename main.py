@@ -1,7 +1,5 @@
-from datetime import datetime
-
-from constants import common_constants as constant
-from model.batch_inputs_model import BatchInput
+from src.constants import common_constants
+from src.model.batch_inputs_model import BatchInput
 from src.processor import batch_file_processor
 
 import logging
@@ -17,7 +15,7 @@ if __name__ == "__main__":
     env = 'local'
     source_system = 'sales_ledger'
     batch_processing_category = 'finance_and_accounting'
-    processing_layer = constant.BRONZE_LAYER
+    processing_layer = common_constants.BRONZE_LAYER
     #batch_run_date = datetime.today().strftime('%d-%m-%Y')  # Get today's date in DD-MM-YYYY format
     #batch_run_time = datetime.today().strftime("%H:%M")  # Get today's date in DD-MM-YYYY format
     batch_category = 'finance_and_accounting'

@@ -1,8 +1,8 @@
 import logging
 from datetime import datetime
 
-from constants import common_constants as constant
-from model.batch_config_model import BatchRunInputDateTime
+from src.constants import transformation_constants, global_constants
+from src.model.batch_config_model import BatchRunInputDateTime
 
 
 def construct_batch_run_datetime_model(batch_run_date: str, batch_run_time: str) -> BatchRunInputDateTime | None:
@@ -15,8 +15,9 @@ def construct_batch_run_datetime_model(batch_run_date: str, batch_run_time: str)
 
     try:
         yyyy_mm_dd_batch_run_date = convert_date_to_yyyy_mm_dd(batch_run_date)
+        hh_mm_time = convert_time_to_hh_mm(batch_run_time)
         formatted_date = datetime.strptime(yyyy_mm_dd_batch_run_date, "%Y-%m-%d")
-        formatted_time = datetime.strptime(batch_run_time, "%H:%M")
+        formatted_time = datetime.strptime(hh_mm_time, "%H:%M")
 
         year = formatted_date.strftime("%Y")
         month = formatted_date.strftime("%m")
@@ -43,13 +44,37 @@ def convert_date_to_yyyy_mm_dd(date_str: str) -> str:
     """
     This function will try to parse the provided date using common date formats and return a datetime object
     :param date_str: Date string in any date format
-    :return: The parsed datetime object
+    :return: The parsed datetime object or else throws ValueError if date string is not parseable
     """
-    for formats in constant.SUPPORTED_DATE_FORMATS:
+
+    if not date_str or date_str is None:
+        raise ValueError(f"Provided date for conversion cannot be null or empty")
+
+    for date_format in global_constants.SUPPORTED_DATE_FORMATS:
         try:
-            datetime_obj = datetime.strptime(date_str.strip(), formats)
-            return datetime_obj.strftime("%Y-%m-%d")
+            datetime_obj = datetime.strptime(date_str.strip(), date_format)
+            return datetime_obj.strftime(transformation_constants.DATE_FORMAT_YYYY_MM_DD)
         except ValueError:
             continue
 
     raise ValueError(f"Unsupported date format: {date_str}")
+
+
+def convert_time_to_hh_mm(time_str: str) -> str:
+    """
+    This function will try to parse the provided time using common time formats and return a time object
+    :param time_str: Time string in any time format
+    :return: The parsed time object or else throws ValueError if time string is not parseable
+    """
+
+    if not time_str or time_str is None:
+        raise ValueError(f"Provided time cannot be null or empty")
+
+    for time_format in global_constants.SUPPORTED_TIME_FORMATS:
+        try:
+            formatted_time = datetime.strptime(time_str.strip(), time_format)
+            return formatted_time.strftime(transformation_constants.TIME_FORMAT_HH_MM)
+        except ValueError:
+            continue
+
+    raise ValueError(f"Unsupported date format: {time_str}")
