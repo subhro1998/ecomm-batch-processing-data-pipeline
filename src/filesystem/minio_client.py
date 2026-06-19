@@ -9,14 +9,14 @@ from test import bronze_validator
 def connect_minio_and_fetch_file(minio_conn: Minio, bucket_name: str,
                                  sub_folder: str, file_extension: str) -> str | None:
     """
-    This method fetches the required files and content from the minio bucket.
-    And if the files is in required format then returns the content of the files else returns None.
+    This method fetches the required filesystem and content from the minio bucket.
+    And if the filesystem is in required format then returns the content of the filesystem else returns None.
 
     :param minio_conn: Minio connection object
     :param bucket_name: Bucket name based on processing layer
     :param sub_folder: Sub folder path
-    :param file_extension: Expected files extension
-    :return: None if validation is not successful and files content if files successfully passes the validation
+    :param file_extension: Expected filesystem extension
+    :return: None if validation is not successful and filesystem content if filesystem successfully passes the validation
     """
 
     try:
@@ -50,7 +50,7 @@ def connect_minio_and_fetch_file(minio_conn: Minio, bucket_name: str,
                 logging.info(f'File {file_name} is valid, processing it')
                 return file_name
 
-        # Unable to find files with provided details satisfying conditions
+        # Unable to find filesystem with provided details satisfying conditions
         logging.warning(f'No matching {file_extension} file found in path {bucket_name}/{sub_folder}')
         return None
 

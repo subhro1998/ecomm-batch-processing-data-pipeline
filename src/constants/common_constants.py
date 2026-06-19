@@ -12,7 +12,7 @@ MINIO_CONFIG_VALUE_FILE_SYSTEM_S3AFILE_SYSTEM = 'org.apache.hadoop.fs.s3a.S3AFil
 MINIO_AWS_CREDENTIALS_PROVIDER_CONFIG_VALUE = 'minio.config.aws-minio-credential-provider'
 MINIO_AWS_SPARK_PACKAGES_CONFIG_VALUE = 'minio.config.aws-minio-packages'
 
-# Config files path
+# Config filesystem path
 MINIO_CONFIG_FILE = 'config/minio_config.yml'
 POSTGRES_CONFIG_FILE = 'config/postgres_config.yml'
 DATA_PIPELINE_CONFIG_FILE = 'config/data_pipeline_config.yml'

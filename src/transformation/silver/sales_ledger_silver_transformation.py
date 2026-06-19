@@ -26,8 +26,8 @@ def process_sales_ledger_data_silver(batch_inputs: BatchInput, df: DataFrame) ->
     # Step 4: Type case data types and date time format to make the data uniform
     valid_df = type_cast_sales_ledger_data(valid_df)
 
-    # Step 5: Cleanse the valid records, fill None values as per pre-decided strategy
-    cleansed_df = cleanse_and_transform_sales_ledger_data(valid_df)
+    # Step 5: Enrich the cleansed valid records, fill None values as per pre-decided strategy
+    enriched_and_cleansed_df = enrich_sales_ledger_data(valid_df)
 
     return None
 
@@ -72,7 +72,7 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
             ["transaction_date", "transaction_time"]
         ),
         (
-            ~F.upper(F.col("currency")).isin(*global_constants.ALLOWED_CURRENCYS),
+            ~F.upper(F.col("currency")).isin(*global_constants.ALLOWED_CURRENCIES),
             "INVALID_CURRENCY",
             ["currency"]
         ),
@@ -113,13 +113,13 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
         ),
         (
             F.round(F.col("usd_equivalent_amount"), 2) !=
-            F.round(F.col("net_amount") * F.col("exchange_rate"), 2),
+            F.round(F.col("net_amount") * F.col("usd_exchange_rate."), 2),
             "USD_EQUIVALENCE_IS_NOT_MATCHING",
-            ["usd_equivalent_amount", "net_amount", "exchange_rate"]
+            ["usd_equivalent_amount", "net_amount", "usd_exchange_rate."]
         ),
         (
-            (F.col("entry_type") == F.lit(common_constants.ENTRY_TYPE_REVERSAL_PAYMENT)) & F.col(
-                "reversal_reference").isNull(),
+            (F.col("entry_type").eqNullSafe(common_constants.ENTRY_TYPE_REVERSAL_PAYMENT))
+            & F.col("reversal_reference").isNull(),
             "REVERSAL_PAYMENT_WITH_NO_REFERENCE",
             ["entry_type", "reversal_reference"]
         )
@@ -150,14 +150,14 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
     # Quarantine the records that failed necessary validation
     quarantined_df = tagged_df \
         .filter(F.col(transformation_constants.COLUMN_NAME_VALIDATION_RESULT)
-                == transformation_constants.VALIDATION_RESULT_FAILED
-                and F.size(F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON)) > 0
-                and F.size(F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON)) > 0)
+                .eqNullSafe(transformation_constants.VALIDATION_RESULT_FAILED)
+                & F.size(F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON)) > 0
+                & F.size(F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON)) > 0)
 
     # Separate the valid records and use this data frame further
     valid_df = tagged_df \
         .filter(F.col(transformation_constants.COLUMN_NAME_VALIDATION_RESULT)
-                == transformation_constants.VALIDATION_RESULT_SUCCESSFUL) \
+                .eqNullSafe(transformation_constants.VALIDATION_RESULT_SUCCESSFUL)) \
         .drop(transformation_constants.COLUMN_NAME_FAILURE_REASON,
               transformation_constants.COLUMN_NAME_FAILED_COLUMNS)
 
@@ -210,23 +210,126 @@ def type_cast_sales_ledger_data(df: DataFrame) -> DataFrame:
         .withColumn("debit_amount", F.col("debit_amount").cast(DecimalType(18, 2))) \
         .withColumn("credit_amount", F.col("credit_amount").cast(DecimalType(18, 2))) \
         .withColumn("net_amount", F.col("net_amount").cast(DecimalType(18, 2))) \
-        .withColumn("exchange_rate", F.col("exchange_rate").cast(DecimalType(10, 6))) \
+        .withColumn("usd_exchange_rate.", F.col("usd_exchange_rate.").cast(DecimalType(10, 6))) \
         .withColumn("usd_equivalent", F.col("usd_equivalent").cast(DecimalType(18, 2))) \
         .withColumn("tax_amount", F.col("tax_amount").cast(DecimalType(18, 2))) \
         .withColumn("discount_amount", F.col("discount_amount").cast(DecimalType(18, 2))) \
         .withColumn("gross_amount", F.col("gross_amount").cast(DecimalType(18, 2))) \
-        .withColumn("cost_of_goods", F.col("cost_of_goods").cast(DecimalType(18, 2))) \
+        .withColumn("cost_of_goods_usd", F.col("cost_of_goods_usd").cast(DecimalType(18, 2))) \
         .withColumn("is_reconciled", F.col("is_reconciled").cast(BooleanType()))
 
 
-def cleanse_and_transform_sales_ledger_data(df: DataFrame) -> DataFrame:
+def enrich_sales_ledger_data(cleansed_df: DataFrame) -> DataFrame:
+    """
+    Cleanse and transform sales ledger data and store the final result for further analysis
+    :param cleansed_df: Cleansed sales ledger data frame
+    :return: The enriched sales ledger data frame
+    """
+
+    # Conditions where financial analyst needs to manually analyze
+    condition_missing_fx = F.col("usd_exchange_rate").isNull()
+    condition_zero_fx = F.col("usd_exchange_rate").eqNullSafe(F.lit(0.0))
+    condition_missing_cog = F.col("cost_of_goods_usd").isNull()
+    condition_cog_gt_usd = F.col("cost_of_goods_usd") > F.col("usd_equivalent")
+    condition_discount_gt_gross = F.col("discount_amount") > F.col("gross_amount")
+    condition_txn_created_gap_gt_15 = (
+            F.abs(
+                F.datediff(
+                    F.to_date(F.col("_parsed_txn_date")),
+                    F.to_date(F.col("created_at"))
+                )
+            ) > 15
+    )
+
+    # Derive the quarter of sale
+    cleansed_and_enriched_df = \
+        (cleansed_df
+        # Fiscal period: Apr=1, May=2, ..., Mar=12
+        .withColumn("fiscal_period", (((F.month("txn_date") + 8) % 12) + 1))
+
+        # Fiscal quarter: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar
+        .withColumn("fiscal_quarter_num", F.floor((F.col("fiscal_period") - 1) / 3) + 1)
+        .withColumn("fiscal_quarter", F.concat(F.lit("Q"), F.col("fiscal_quarter_num")))
+
+        # fiscal year label as end year, Example: 2025-04-01 -> FY2026, 2026-02-15 -> FY2026
+        .withColumn("fiscal_year",
+                    F.when(F.month("txn_date") > 3, F.year("txn_date") + 1)
+                    .otherwise(F.year("txn_date")))
+
+        # Infer gross amount if it's not preset or null
+        .withColumn("gross_amount",
+                    F.round(
+                        F.coalesce(
+                            F.col("gross_amount"),
+                            F.col("net_amount") + F.col("tax_amount") + F.col("discount_amount")),
+                        2)
+                    )
+
+        # USD equivalent calculation if not present
+        .withColumn("usd_equivalent",
+                    F.round(
+                        F.coalesce(
+                            F.col("usd_equivalent"),
+                            F.col("net_amount") * F.col("usd_exchange_rate") - F.col("tax_amount") - F.col(
+                                "discount_amount")
+                        ),
+                        2)
+                    )
+
+        # Different amount and % calculations
+        .withColumn("tax_amount", F.coalesce(F.col("tax_amount"), F.lit(0.00)))
+        .withColumn("discount_amount", F.coalesce(F.col("discount_amount"), F.lit(0.00)))
+        .withColumn("gross_margin_amt_usd", F.round(F.col("usd_equivalent") - F.col("cost_of_goods_usd"), 2))
+        .withColumn("gross_margin_percentage",
+                    F.round(((F.col("gross_margin_amt_usd") / F.col("usd_equivalent")) * 100), 4))
+        .withColumn("effective_tax_rate", F.round(((F.col("tax_amount") / F.col("gross_amount")) * 100), 4))
+        .withColumn("discount_rate", F.round(((F.col("discount_amount") / F.col("gross_amount")) * 100), 4))
+
+        # Behavioral / classification columns
+        .withColumn("is_cross_border",
+                    F.when(
+                        (~F.upper(F.col("currency")).eqNullSafe(transformation_constants.CURRENCY_USD)
+                         & F.col("usd_exchange_rate") != 1.0),
+                        F.lit(True)
+                        .otherwise(F.lit(False)))
+                    )
+        .withColumn("is_high_value",
+                    F.when(F.col("usd_equivalent") >= transformation_constants.HIGH_VALUE_TXN_AMOUNT_THRESHOLD,
+                           F.lit(True))
+                    .otherwise(F.lit(False))
+                    )
+        .withColumn("is_forex_risk_transaction", F.col("is_cross_border") | F.col("is_high_value"))
+        .withColumn("transaction_direction",
+                    F.when(F.upper(F.col("entry_type")).isin(transformation_constants.OUTFLOW_TRANSACTION_TYPES)
+                           & F.col("net_amount") < 0.0,
+                           transformation_constants.TRANSACTION_OUTFLOW)
+                    .otherwise(transformation_constants.TRANSACTION_INFLOW))
+        .withColumn("amount_mismatch",
+                    F.when(F.col("gross_amount")
+                           - (F.col("net_amount") + F.col("tax_amount") + F.col("discount_amount")) <= 0.01,
+                           False)
+                    .otherwise(True)
+                    )
+        .withColumns(
+            {
+                "manual_analysis_required": condition_missing_fx | condition_zero_fx | condition_missing_cog
+                                            | condition_cog_gt_usd | condition_discount_gt_gross
+                                            | condition_txn_created_gap_gt_15,
+                "deeper_analysis_area": F.concat_ws(
+                    " | ",
+                    F.when(condition_missing_fx, F.lit("usd_exchange_rate is null")),
+                    F.when(condition_zero_fx, F.lit("usd_exchange_rate = 0")),
+                    F.when(condition_missing_cog, F.lit("cost_of_goods_usd is null")),
+                    F.when(condition_cog_gt_usd, F.lit("cost_of_goods_usd > usd_equivalent")),
+                    F.when(condition_discount_gt_gross, F.lit("discount_amount > gross_amount")),
+                    F.when(condition_txn_created_gap_gt_15, F.lit("txn_date - created_at > 15 days")))
+            })
+        )
+
     # Trim all values of the string data types
     for schema_field in financial_data_system_schemas.SILVER_SALES_LEDGER_SCHEMA.fields:
         if schema_field.dataType.simpleString().lower() in ["string", "str"]:
-            df = df.withColumn(schema_field.name, F.trim(F.col(schema_field.name)))
+            cleansed_and_enriched_df = cleansed_and_enriched_df \
+                .withColumn(schema_field.name, F.trim(F.col(schema_field.name)))
 
-    # Derive the quarter of sale
-
-    # Flag the data which has discount
-
-    return df
+    return cleansed_and_enriched_df

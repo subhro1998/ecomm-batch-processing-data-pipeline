@@ -30,7 +30,7 @@ def initialize_spark_session(env, minio_config: dict) -> SparkSession:
              # Minio user password
              .config(common_constants.MINIO_PASSWORD_CONFIG_KEY,
                      minio_config.get(common_constants.MINIO_USER_PASSWORD_CONFIG_PATH.format(env=env)))
-             # Minio files system -> S3A File System for now
+             # Minio filesystem system -> S3A File System for now
              .config(common_constants.MINIO_FILE_SYSTEM_CONFIG_KEY,
                      common_constants.MINIO_CONFIG_VALUE_FILE_SYSTEM_S3AFILE_SYSTEM)
              # File accessible -> True always

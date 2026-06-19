@@ -7,12 +7,12 @@ from src.model.batch_config_model import BatchConfig
 from src.model.batch_inputs_model import BatchInput
 
 
-# Load CSV files from configured minio bucket
+# Load CSV filesystem from configured minio bucket
 def read_file_and_convert_into_data_frame(batch_input: BatchInput, batch_config: BatchConfig,
                                           file_name: str, sub_folder: str,
                                           file_extension: str) -> DataFrame | None:
     """
-    This method is used to load csv files, run basic validation and store in Bronze raw table
+    This method is used to load csv filesystem, run basic validation and store in Bronze raw table
     It uses the attached Batch Input model for connecting to minio and fetching the file
     :param batch_input: Batch Input model
     :param batch_config: Batch Config model
@@ -43,7 +43,7 @@ def read_file_and_convert_into_data_frame(batch_input: BatchInput, batch_config:
                       f'or not matching with the file extension: {file_extension}')
         return None
 
-    # Load files into Spark data frame
+    # Load filesystem into Spark data frame
     file_path_with_name = f'{file_path}/{file_name}'  # File absolute path
     df = None  # Initialize the data frame
     match file_extension:

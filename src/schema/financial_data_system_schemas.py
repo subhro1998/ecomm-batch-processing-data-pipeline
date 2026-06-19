@@ -5,9 +5,9 @@ from pyspark.sql.types import (
 
 # Columns Silver must have before saving — non-negotiable
 SALES_LEDGER_NOT_NULL_COLUMNS = [
-    "ledger_id", "transaction_date", "transaction_time", "order_id",
-    "customer_id", "debit_amount", "credit_amount", "net_amount", "currency",
-    "exchange_rate", "source_system", "gross_amount", "batch_id", "created_at",
+    "ledger_id", "transaction_date", "transaction_time", "order_id", "customer_id",
+    "debit_amount", "credit_amount", "net_amount", "currency", "usd_exchange_rate",
+    "source_system", "gross_amount", "batch_id", "created_at", "cost_of_goods_usd"
 ]
 
 SILVER_SALES_LEDGER_SCHEMA = StructType([
@@ -27,7 +27,7 @@ SILVER_SALES_LEDGER_SCHEMA = StructType([
     StructField("credit_amount", DecimalType(20, 2), False),
     StructField("net_amount", DecimalType(22, 2), False),
     StructField("currency", StringType(), False),
-    StructField("exchange_rate", DecimalType(10, 6), False),
+    StructField("usd_exchange_rate", DecimalType(10, 6), False),
     StructField("usd_equivalent", DecimalType(18, 2), True),
     StructField("payment_method", StringType(), True),
     StructField("payment_reference", StringType(), True),
@@ -39,7 +39,7 @@ SILVER_SALES_LEDGER_SCHEMA = StructType([
     StructField("tax_amount", DecimalType(18, 2), True),
     StructField("discount_amount", DecimalType(18, 2), True),
     StructField("gross_amount", DecimalType(22, 2), False),
-    StructField("cost_of_goods", DecimalType(22, 2), True),
+    StructField("cost_of_goods_usd", DecimalType(22, 2), False),
     StructField("campaign_id", StringType(), True),
     StructField("is_reconciled", BooleanType(), True),
     StructField("reconciliation_id", StringType(), True),

@@ -7,9 +7,9 @@ from src.model.batch_inputs_model import BatchInput
 # Validate Minio config
 def validate_minio_config(minio_config, env: str) -> bool:
     """
-    This function validates the minio config read from the config files
+    This function validates the minio config read from the config filesystem
 
-    :param minio_config: Minio configs as Dictionary read from the config files
+    :param minio_config: Minio configs as Dictionary read from the config filesystem
     :param env: Environment name
     """
 

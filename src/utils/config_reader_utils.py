@@ -5,11 +5,11 @@ import yaml
 
 def read_config(config_file_path: str) -> dict | None:
     """
-    Method to read the config files
-    If files not found or config is empty then stop the execution further
+    Method to read the config filesystem
+    If filesystem not found or config is empty then stop the execution further
 
-    :param config_file_path: Path to config files
-    :return: Config tree read from config files
+    :param config_file_path: Path to config filesystem
+    :return: Config tree read from config filesystem
     """
 
     try:
@@ -25,7 +25,7 @@ def read_config(config_file_path: str) -> dict | None:
                     return None
 
     except FileNotFoundError:
-        logging.error(f"Config files not found in path: {config_file_path}")
+        logging.error(f"Config filesystem not found in path: {config_file_path}")
         return None
 
 

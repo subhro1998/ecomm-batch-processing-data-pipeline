@@ -1,6 +1,6 @@
 import logging
 
-# Run basic validation for Bronze layer processor files
+# Run basic validation for Bronze layer processor filesystem
 def validate_bronze_file(file_name, file_size, expected_file_extension: str) -> bool:
     if not file_name.endswith(expected_file_extension):
         logging.warning(f'File extension is not same with expected file extension: {expected_file_extension}')
