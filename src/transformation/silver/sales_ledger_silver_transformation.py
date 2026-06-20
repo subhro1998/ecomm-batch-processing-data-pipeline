@@ -20,14 +20,15 @@ def process_sales_ledger_data_silver(batch_inputs: BatchInput, df: DataFrame) ->
     quarantined_df, valid_df = categorize_sales_ledger_data_validity(batch_inputs, unique_df)
 
     # Step 3: Combine duplicate data and validation failed data and quarantine them to analyze further
-    records_to_quarantine = duplicates_df.unionByName(quarantined_df, allowMissingColumns=True)
+    # records_to_quarantine = duplicates_df.unionByName(quarantined_df, allowMissingColumns=True)
     # save_and_upload_bad_records(records_to_quarantine)
 
     # Step 4: Type case data types and date time format to make the data uniform
-    valid_df = type_cast_sales_ledger_data(valid_df)
+    # valid_df = type_cast_sales_ledger_data(valid_df)
 
     # Step 5: Enrich the cleansed valid records, fill None values as per pre-decided strategy
     enriched_and_cleansed_df = enrich_sales_ledger_data(valid_df)
+    enriched_and_cleansed_df.show()
 
     return None
 
@@ -55,6 +56,12 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
              and the valid sales ledger records data frame
     """
 
+    created_at_timestamp_col = F.trim(F.col("created_at").cast("string"))
+    created_at_parse_expr = F.coalesce(
+        *[F.try_to_timestamp(created_at_timestamp_col, F.lit(timestamp_format))
+          for timestamp_format in global_constants.SPARK_TIMESTAMP_FORMATS]
+    )
+
     validation_rules_list = [
         (
             F.col("source_system") != F.lit(batch_inputs.source_system),
@@ -70,6 +77,13 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
             F.col("_parsed_txn_date").isNull() | F.col("_parsed_txn_time").isNull(),
             "NOT_PARSABLE_DATE_OR_TIME_FORMAT",
             ["transaction_date", "transaction_time"]
+        ),
+        (
+            F.col("created_at").isNotNull()
+            & (created_at_timestamp_col != "")
+            & created_at_parse_expr.isNull(),
+            "BAD_TIMESTAMP_OF_CREATED_AT_COLUMN",
+            ["created_at"]
         ),
         (
             ~F.upper(F.col("currency")).isin(*global_constants.ALLOWED_CURRENCIES),
@@ -112,10 +126,10 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
             ["credit_amount", "debit_amount", "net_amount"]
         ),
         (
-            F.round(F.col("usd_equivalent_amount"), 2) !=
-            F.round(F.col("net_amount") * F.col("usd_exchange_rate."), 2),
+            F.round(F.col("usd_equivalent"), 2) !=
+            F.round(F.col("net_amount") * F.col("usd_exchange_rate"), 2),
             "USD_EQUIVALENCE_IS_NOT_MATCHING",
-            ["usd_equivalent_amount", "net_amount", "usd_exchange_rate."]
+            ["usd_equivalent", "net_amount", "usd_exchange_rate"]
         ),
         (
             (F.col("entry_type").eqNullSafe(common_constants.ENTRY_TYPE_REVERSAL_PAYMENT))
@@ -125,34 +139,41 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
         )
     ]
 
-    failure_reason_codes = []
-    failed_column_checks = []
+    failure_reason_exprs = []
+    failed_columns_exprs = []
     for condition, reason, column_names in validation_rules_list:
-        failure_reason_codes.append(
+        failure_reason_exprs.append(
             F.when(condition, F.lit(reason))
         )
-        failed_column_checks.append(
-            F.when(condition, F.lit(column_name for column_name in column_names))
+
+        failed_columns_exprs.append(
+            F.when(
+                condition,
+                F.array(*[F.lit(col_name) for col_name in column_names])
+            ).otherwise(F.array())
         )
+
+    failure_reason_col = F.array_compact(F.array(*failure_reason_exprs))
+    failed_columns_col = F.array_distinct(F.flatten(F.array(*failed_columns_exprs)))
 
     # Tag the whole data frame based on validation checks
     tagged_df = df \
-        .withColumn(transformation_constants.COLUMN_NAME_FAILURE_REASON,
-                    F.array_compact(F.array(*failure_reason_codes))) \
-        .withColumn(transformation_constants.COLUMN_NAME_FAILED_COLUMNS,
-                    F.array_distinct(F.array_compact(F.array(*failed_column_checks)))) \
+        .withColumn(transformation_constants.COLUMN_NAME_FAILURE_REASON, failure_reason_col) \
+        .withColumn(transformation_constants.COLUMN_NAME_FAILED_COLUMNS, failed_columns_col) \
         .withColumn(transformation_constants.COLUMN_NAME_VALIDATION_RESULT,
                     F.when(
-                        F.size(F.array(failed_column_checks)) > 0,
-                        F.lit(transformation_constants.VALIDATION_RESULT_FAILED))
-                    .otherwise(F.lit(transformation_constants.VALIDATION_RESULT_SUCCESSFUL)))
+                        F.size(failed_columns_col) > 0,
+                        F.lit(transformation_constants.VALIDATION_RESULT_FAILED)
+                    )
+                    .otherwise(F.lit(transformation_constants.VALIDATION_RESULT_SUCCESSFUL))
+                    )
 
     # Quarantine the records that failed necessary validation
     quarantined_df = tagged_df \
-        .filter(F.col(transformation_constants.COLUMN_NAME_VALIDATION_RESULT)
-                .eqNullSafe(transformation_constants.VALIDATION_RESULT_FAILED)
-                & F.size(F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON)) > 0
-                & F.size(F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON)) > 0)
+        .filter((F.col(transformation_constants.COLUMN_NAME_VALIDATION_RESULT)
+                 .eqNullSafe(transformation_constants.VALIDATION_RESULT_FAILED))
+                & (F.size(F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON)) > 0)
+                & (F.size(F.col(transformation_constants.COLUMN_NAME_FAILED_COLUMNS)) > 0))
 
     # Separate the valid records and use this data frame further
     valid_df = tagged_df \
@@ -245,7 +266,7 @@ def enrich_sales_ledger_data(cleansed_df: DataFrame) -> DataFrame:
     cleansed_and_enriched_df = \
         (cleansed_df
         # Fiscal period: Apr=1, May=2, ..., Mar=12
-        .withColumn("fiscal_period", (((F.month("txn_date") + 8) % 12) + 1))
+        .withColumn("fiscal_period", (((F.month("_parsed_txn_date") + 8) % 12) + 1))
 
         # Fiscal quarter: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar
         .withColumn("fiscal_quarter_num", F.floor((F.col("fiscal_period") - 1) / 3) + 1)
@@ -253,8 +274,8 @@ def enrich_sales_ledger_data(cleansed_df: DataFrame) -> DataFrame:
 
         # fiscal year label as end year, Example: 2025-04-01 -> FY2026, 2026-02-15 -> FY2026
         .withColumn("fiscal_year",
-                    F.when(F.month("txn_date") > 3, F.year("txn_date") + 1)
-                    .otherwise(F.year("txn_date")))
+                    F.when(F.month("_parsed_txn_date") > 3, F.year("_parsed_txn_date") + 1)
+                    .otherwise(F.year("_parsed_txn_date")))
 
         # Infer gross amount if it's not preset or null
         .withColumn("gross_amount",
@@ -287,21 +308,14 @@ def enrich_sales_ledger_data(cleansed_df: DataFrame) -> DataFrame:
 
         # Behavioral / classification columns
         .withColumn("is_cross_border",
-                    F.when(
-                        (~F.upper(F.col("currency")).eqNullSafe(transformation_constants.CURRENCY_USD)
-                         & F.col("usd_exchange_rate") != 1.0),
-                        F.lit(True)
-                        .otherwise(F.lit(False)))
-                    )
+                    (~F.upper(F.col("currency")).eqNullSafe(transformation_constants.CURRENCY_USD))
+                    & (F.col("usd_exchange_rate") != 1.0))
         .withColumn("is_high_value",
-                    F.when(F.col("usd_equivalent") >= transformation_constants.HIGH_VALUE_TXN_AMOUNT_THRESHOLD,
-                           F.lit(True))
-                    .otherwise(F.lit(False))
-                    )
-        .withColumn("is_forex_risk_transaction", F.col("is_cross_border") | F.col("is_high_value"))
+                    F.col("usd_equivalent") >= transformation_constants.HIGH_VALUE_TXN_AMOUNT_THRESHOLD)
+        .withColumn("is_forex_risk_transaction", (F.col("is_cross_border")) | (F.col("is_high_value")))
         .withColumn("transaction_direction",
-                    F.when(F.upper(F.col("entry_type")).isin(transformation_constants.OUTFLOW_TRANSACTION_TYPES)
-                           & F.col("net_amount") < 0.0,
+                    F.when((F.upper(F.col("entry_type")).isin(transformation_constants.OUTFLOW_TRANSACTION_TYPES))
+                           & (F.col("net_amount") < 0.0),
                            transformation_constants.TRANSACTION_OUTFLOW)
                     .otherwise(transformation_constants.TRANSACTION_INFLOW))
         .withColumn("amount_mismatch",
