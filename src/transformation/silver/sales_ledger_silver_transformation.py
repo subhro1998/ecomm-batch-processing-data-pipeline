@@ -10,24 +10,24 @@ from src.transformation import transformation_utils
 
 
 def process_sales_ledger_data_silver(batch_inputs: BatchInput, df: DataFrame) -> None:
-    # Step 1: add some necessary columns in the raw data
+    # Step 1: Add necessary columns in data frame
     df = add_necessary_derived_columns(df)
 
-    # Step 2: Deduplicate records based on sales ledger natural keys
-    unique_df, duplicates_df = deduplicate_sales_ledger_data(df)
+    # Step 2: Separate data that failed & passed the Silver layer validation
+    quarantined_df, valid_df_with_duplicates = categorize_sales_ledger_data_validity(batch_inputs, df)
 
-    # 2nd step: Separate data that failed & passed the Silver layer validation
-    quarantined_df, valid_df = categorize_sales_ledger_data_validity(batch_inputs, unique_df)
+    # Step 3: Deduplicate records based on sales ledger natural keys
+    valid_unique_df, duplicates_df = deduplicate_sales_ledger_data(valid_df_with_duplicates)
 
-    # Step 3: Combine duplicate data and validation failed data and quarantine them to analyze further
+    # Step 4: Combine duplicate data and validation failed data and quarantine them to analyze further
     # records_to_quarantine = duplicates_df.unionByName(quarantined_df, allowMissingColumns=True)
     # save_and_upload_bad_records(records_to_quarantine)
 
-    # Step 4: Type case data types and date time format to make the data uniform
-    # valid_df = type_cast_sales_ledger_data(valid_df)
+    # Step 5: Type case data types and date time format to make the data uniform
+    # valid_df = type_cast_sales_ledger_data(valid_unique_df)
 
-    # Step 5: Enrich the cleansed valid records, fill None values as per pre-decided strategy
-    enriched_and_cleansed_df = enrich_sales_ledger_data(valid_df)
+    # Step 6: Enrich the cleansed valid records, fill None values as per pre-decided strategy
+    enriched_and_cleansed_df = enrich_sales_ledger_data(valid_unique_df)
     enriched_and_cleansed_df.show()
 
     return None
@@ -39,8 +39,16 @@ def add_necessary_derived_columns(raw_df: DataFrame) -> DataFrame:
 
     return raw_df \
         .withColumn("silver_processed_at", F.current_timestamp()) \
-        .withColumn("_parsed_txn_date", parsed_date) \
-        .withColumn("_parsed_txn_time", parsed_time)
+        .withColumn("_parsed_txn_date",
+                    F.date_format(
+                        parsed_date,
+                        transformation_constants.SPARK_DATE_FORMAT_YYYY_MM_DD
+                    )) \
+        .withColumn("_parsed_txn_time",
+                    F.date_format(
+                        parsed_time,
+                        transformation_constants.SPARK_TIME_FORMAT_HH_MM
+                    ))
 
 
 # Quarantine the validation failed records to analyze later (should upload as a file & save in DB -> both)
@@ -69,12 +77,12 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
             ["source_system"]
         ),
         (
-            F.col("transaction_date").isNull() | F.col("transaction_time").isNotNull(),
+            (F.col("transaction_date").isNull()) | (F.col("transaction_time").isNull()),
             "NULL_TXN_DATE_OR_TIME",
             ["transaction_date", "transaction_time"]
         ),
         (
-            F.col("_parsed_txn_date").isNull() | F.col("_parsed_txn_time").isNull(),
+            (F.col("_parsed_txn_date").isNull()) | (F.col("_parsed_txn_time").isNull()),
             "NOT_PARSABLE_DATE_OR_TIME_FORMAT",
             ["transaction_date", "transaction_time"]
         ),
@@ -168,7 +176,7 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
                     .otherwise(F.lit(transformation_constants.VALIDATION_RESULT_SUCCESSFUL))
                     )
 
-    # Quarantine the records that failed necessary validation
+    # Quarantine the records that failed necessary validation fdv
     quarantined_df = tagged_df \
         .filter((F.col(transformation_constants.COLUMN_NAME_VALIDATION_RESULT)
                  .eqNullSafe(transformation_constants.VALIDATION_RESULT_FAILED))
@@ -179,8 +187,10 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
     valid_df = tagged_df \
         .filter(F.col(transformation_constants.COLUMN_NAME_VALIDATION_RESULT)
                 .eqNullSafe(transformation_constants.VALIDATION_RESULT_SUCCESSFUL)) \
+        .withColumn("_created_at_ts", created_at_parse_expr) \
+        .withColumn("_created_at_date", F.to_date(F.col("_created_at_ts"))) \
         .drop(transformation_constants.COLUMN_NAME_FAILURE_REASON,
-              transformation_constants.COLUMN_NAME_FAILED_COLUMNS)
+              transformation_constants.COLUMN_NAME_FAILED_COLUMNS, "created_at")
 
     return quarantined_df, valid_df
 
@@ -195,7 +205,7 @@ def deduplicate_sales_ledger_data(df: DataFrame) -> tuple[DataFrame, DataFrame]:
     # Create the window function over Deduplication keys for Sales Ledger
     window_function = Window \
         .partitionBy(transformation_constants.SALES_LEDGER_DE_DUPLICATE_KEYS) \
-        .orderBy(F.col("created_at").desc())
+        .orderBy(F.col("_created_at_date").desc_nulls_last())
 
     # Ranked data frame with row_number for deduplication using natural keys for ales ledger
     ranked_df = df.withColumn("row_number", F.row_number().over(window_function))
@@ -227,11 +237,10 @@ def type_cast_sales_ledger_data(df: DataFrame) -> DataFrame:
     """
 
     return df \
-        .withColumn("created_at", F.to_timestamp("created_at", "yyyy-MM-dd'T'HH:mm:ss'Z'")) \
         .withColumn("debit_amount", F.col("debit_amount").cast(DecimalType(18, 2))) \
         .withColumn("credit_amount", F.col("credit_amount").cast(DecimalType(18, 2))) \
         .withColumn("net_amount", F.col("net_amount").cast(DecimalType(18, 2))) \
-        .withColumn("usd_exchange_rate.", F.col("usd_exchange_rate.").cast(DecimalType(10, 6))) \
+        .withColumn("usd_exchange_rate", F.col("usd_exchange_rate").cast(DecimalType(10, 6))) \
         .withColumn("usd_equivalent", F.col("usd_equivalent").cast(DecimalType(18, 2))) \
         .withColumn("tax_amount", F.col("tax_amount").cast(DecimalType(18, 2))) \
         .withColumn("discount_amount", F.col("discount_amount").cast(DecimalType(18, 2))) \
@@ -257,7 +266,7 @@ def enrich_sales_ledger_data(cleansed_df: DataFrame) -> DataFrame:
             F.abs(
                 F.datediff(
                     F.to_date(F.col("_parsed_txn_date")),
-                    F.to_date(F.col("created_at"))
+                    F.to_date(F.col("_created_at_date"))
                 )
             ) > 15
     )
