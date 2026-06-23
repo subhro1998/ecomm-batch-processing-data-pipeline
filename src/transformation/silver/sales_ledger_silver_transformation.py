@@ -9,12 +9,12 @@ from src.schema import financial_data_system_schemas
 from src.transformation import transformation_utils
 
 
-def process_sales_ledger_data_silver(batch_inputs: BatchInput, df: DataFrame) -> None:
+def process_sales_ledger_data_silver(batch_inputs: BatchInput, raw_df: DataFrame) -> None:
     # Step 1: Add necessary columns in data frame
-    df = add_necessary_derived_columns(df)
+    raw_df = add_necessary_derived_columns(raw_df)
 
     # Step 2: Separate data that failed & passed the Silver layer validation
-    quarantined_df, valid_df_with_duplicates = categorize_sales_ledger_data_validity(batch_inputs, df)
+    quarantined_df, valid_df_with_duplicates = categorize_sales_ledger_data_validity(batch_inputs, raw_df)
 
     # Step 3: Deduplicate records based on sales ledger natural keys
     valid_unique_df, duplicates_df = deduplicate_sales_ledger_data(valid_df_with_duplicates)
@@ -28,7 +28,6 @@ def process_sales_ledger_data_silver(batch_inputs: BatchInput, df: DataFrame) ->
 
     # Step 6: Enrich the cleansed valid records, fill None values as per pre-decided strategy
     enriched_and_cleansed_df = enrich_sales_ledger_data(valid_unique_df)
-    enriched_and_cleansed_df.show()
 
     return None
 
@@ -64,6 +63,7 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
              and the valid sales ledger records data frame
     """
 
+    numeric_value_regex = r"^-?\d+(\.\d+)?$"
     created_at_timestamp_col = F.trim(F.col("created_at").cast("string"))
     created_at_parse_expr = F.coalesce(
         *[F.try_to_timestamp(created_at_timestamp_col, F.lit(timestamp_format))
@@ -87,9 +87,7 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
             ["transaction_date", "transaction_time"]
         ),
         (
-            F.col("created_at").isNotNull()
-            & (created_at_timestamp_col != "")
-            & created_at_parse_expr.isNull(),
+            (F.col("created_at").isNotNull()) & (created_at_timestamp_col != "") & (created_at_parse_expr.isNull()),
             "BAD_TIMESTAMP_OF_CREATED_AT_COLUMN",
             ["created_at"]
         ),
@@ -99,43 +97,70 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
             ["currency"]
         ),
         (
-            (F.col("debit_amount") < 0) | F.col("debit_amount").isNull(),
-            "NEGATIVE_DEBIT_AMOUNT",
+            (F.col("debit_amount").isNull()) | (F.trim(F.col("debit_amount")) == "")
+            | (~F.col("debit_amount").rlike(numeric_value_regex)) | (F.col("debit_amount") < 0.0),
+            "INVALID_VALUE_DEBIT_AMOUNT",
             ["debit_amount"]
         ),
         (
-            (F.col("credit_amount") < 0) | F.col("credit_amount").isNull(),
-            "NEGATIVE_CREDIT_AMOUNT",
+            (F.col("credit_amount").isNull()) | (F.trim(F.col("credit_amount")) == "")
+            | (~F.col("credit_amount").rlike(numeric_value_regex)) | (F.col("credit_amount") < 0.0),
+            "INVALID_VALUE_CREDIT_AMOUNT",
             ["credit_amount"]
         ),
         (
-            (F.col("net_amount") < 0) | F.col("net_amount").isNull(),
-            "NEGATIVE_NET_AMOUNT",
+            (F.col("net_amount").isNull()) | (F.trim(F.col("net_amount")) == "")
+            | (~F.col("net_amount").rlike(numeric_value_regex)) | (F.col("net_amount") < 0.0),
+            "INVALID_VALUE_NET_AMOUNT",
             ["net_amount"]
         ),
         (
-            F.col("account_name").isNull() | (F.trim(F.col("account_name")) == ""),
+            (F.col("gross_amount").isNotNull()) & (F.trim(F.col("gross_amount")) != "")
+            & (~F.col("gross_amount").rlike(numeric_value_regex)),
+            "INVALID_NUMERIC_VALUE_GROSS_AMOUNT",
+            ["gross_amount"]
+        ),
+        (
+            (F.col("tax_amount").isNotNull()) & (F.trim(F.col("tax_amount")) != "")
+            & (~F.col("tax_amount").rlike(numeric_value_regex)),
+            "INVALID_NUMERIC_VALUE_TAX_AMOUNT",
+            ["tax_amount"]
+        ),
+        (
+            (F.col("discount_amount").isNotNull()) & (F.trim(F.col("discount_amount")) != "")
+            & (~F.col("discount_amount").rlike(numeric_value_regex)),
+            "INVALID_NUMERIC_VALUE_DISCOUNT_AMOUNT",
+            ["discount_amount"]
+        ),
+        (
+            (F.col("account_name").isNull()) | (F.trim(F.col("account_name")) == ""),
             "ACCOUNT_NAME_NULL_OR_BLANK",
             ["account_name"]
         ),
         (
-            F.col("account_code").isNull() | (F.trim(F.col("account_code")) == ""),
+            (F.col("account_code").isNull()) | (F.trim(F.col("account_code")) == ""),
             "ACCOUNT_CODE_NULL_OR_BLANK",
             ["account_code"]
         ),
         (
-            F.col("ledger_id").isNull() | (F.trim(F.col("ledger_id")) == ""),
+            (F.col("ledger_id").isNull()) | (F.trim(F.col("ledger_id")) == ""),
             "LEDGER_ID_NULL",
             ["ledger_id"]
         ),
         (
-            F.round(F.col("credit_amount") - F.col("debit_amount"), 2) != F.round(F.col("net_amount"), 2),
+            (F.col("usd_exchange_rate").isNull()) | (F.trim(F.col("usd_exchange_rate")) == "")
+            | (~F.col("usd_exchange_rate").rlike(numeric_value_regex)) | (F.col("usd_exchange_rate") <= 0.0),
+            "INVALID_USD_EXCHANGE_RATE",
+            ["usd_exchange_rate"]
+        ),
+        (
+            F.round(F.col("debit_amount") - F.col("credit_amount"), 2) != F.round(F.col("net_amount"), 2),
             "BALANCE_IS_BROKEN",
             ["credit_amount", "debit_amount", "net_amount"]
         ),
         (
             F.round(F.col("usd_equivalent"), 2) !=
-            F.round(F.col("net_amount") * F.col("usd_exchange_rate"), 2),
+            F.round(F.try_divide(F.col("net_amount"), F.col("usd_exchange_rate")), 2),
             "USD_EQUIVALENCE_IS_NOT_MATCHING",
             ["usd_equivalent", "net_amount", "usd_exchange_rate"]
         ),
@@ -161,18 +186,38 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
             ).otherwise(F.array())
         )
 
-    failure_reason_col = F.array_compact(F.array(*failure_reason_exprs))
-    failed_columns_col = F.array_distinct(F.flatten(F.array(*failed_columns_exprs)))
+    # Concatenate failure reasons with comma separator
+    failure_reason_col_str = F.concat_ws(common_constants.SEPARATOR_COMMA, *failure_reason_exprs)
+
+    # For failed columns: flatten all arrays, get distinct values, then join as string
+    failed_columns_col_str = F.array_join(
+        F.array_distinct(
+            F.flatten(
+                F.array(*failed_columns_exprs)
+            )
+        ),
+        common_constants.SEPARATOR_COMMA
+    )
 
     # Tag the whole data frame based on validation checks
     tagged_df = df \
-        .withColumn(transformation_constants.COLUMN_NAME_FAILURE_REASON, failure_reason_col) \
-        .withColumn(transformation_constants.COLUMN_NAME_FAILED_COLUMNS, failed_columns_col) \
+        .withColumn(transformation_constants.COLUMN_NAME_FAILURE_REASON,
+                    F.when(
+                        failure_reason_col_str != "",
+                        failure_reason_col_str)
+                    .otherwise(F.lit(None))
+                    ) \
+        .withColumn(transformation_constants.COLUMN_NAME_FAILED_COLUMNS,
+                    F.when(
+                        failed_columns_col_str != "",
+                        failed_columns_col_str)
+                    .otherwise(F.lit(None))
+                    ) \
         .withColumn(transformation_constants.COLUMN_NAME_VALIDATION_RESULT,
                     F.when(
-                        F.size(failed_columns_col) > 0,
-                        F.lit(transformation_constants.VALIDATION_RESULT_FAILED)
-                    )
+                        (F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON).isNotNull()
+                         & F.col(transformation_constants.COLUMN_NAME_FAILED_COLUMNS).isNotNull()),
+                        F.lit(transformation_constants.VALIDATION_RESULT_FAILED))
                     .otherwise(F.lit(transformation_constants.VALIDATION_RESULT_SUCCESSFUL))
                     )
 
@@ -180,8 +225,8 @@ def categorize_sales_ledger_data_validity(batch_inputs: BatchInput, df: DataFram
     quarantined_df = tagged_df \
         .filter((F.col(transformation_constants.COLUMN_NAME_VALIDATION_RESULT)
                  .eqNullSafe(transformation_constants.VALIDATION_RESULT_FAILED))
-                & (F.size(F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON)) > 0)
-                & (F.size(F.col(transformation_constants.COLUMN_NAME_FAILED_COLUMNS)) > 0))
+                & (F.col(transformation_constants.COLUMN_NAME_FAILURE_REASON).isNotNull())
+                & (F.col(transformation_constants.COLUMN_NAME_FAILED_COLUMNS).isNotNull()))
 
     # Separate the valid records and use this data frame further
     valid_df = tagged_df \

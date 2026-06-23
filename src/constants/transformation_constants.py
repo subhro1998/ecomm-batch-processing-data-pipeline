@@ -8,7 +8,7 @@ VALIDATION_RESULT_SUCCESSFUL = "SUCCESSFUL"
 VALIDATION_RESULT_FAILED = "FAILED"
 VALIDATION_FAILURE_REASON_DUPLICATE = "DUPLICATE record based on SALES Ledger Deduplicate key"
 
-SALES_LEDGER_DE_DUPLICATE_KEYS = ["ledger_id", "batch_id", "source_system", "source_file_name"]
+SALES_LEDGER_DE_DUPLICATE_KEYS = ["ledger_id", "source_system", "batch_id"]
 SALES_LEDGER_ENUM_COLUMNS = ["entry_type", "currency", "payment_method", "channel", "region", "country_code"]
 SALES_LEDGER_STRING_COLUMNS = ["entry_type", "currency", "payment_method", "channel", "region", "country_code"]
 SALES_LEDGER_NOT_NULL_COLUMNS = ["ledger_id", "batch_id", "source_system", "created_at", "source_file_name"]
